@@ -1,6 +1,6 @@
 const config = {
   API_BASE_URL: process.env.NODE_ENV === 'production' 
-    ? window.location.origin
+    ? 'https://peerversefinal-production.up.railway.app'
     : 'http://localhost:3000'
 };
 
