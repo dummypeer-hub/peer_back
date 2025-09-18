@@ -1,0 +1,17 @@
+{
+  "name": "peerverse",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd FRONTEND/frontone && npm run build",
+    "start": "node api/index.js",
+    "dev": "cd FRONTEND/frontone && npm start"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
