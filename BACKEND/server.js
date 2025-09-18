@@ -11,6 +11,7 @@ const { Server } = require('socket.io');
 require('dotenv').config();
 
 const app = express();
+app.set('trust proxy', 1); // Trust Railway proxy
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
