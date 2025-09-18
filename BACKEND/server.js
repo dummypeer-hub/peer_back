@@ -115,7 +115,7 @@ const limiter = rateLimit({
 });
 
 app.use(cors({
-  origin: true,
+  origin: ['https://peerverse-final.vercel.app', 'http://localhost:3000', 'http://localhost:3001'],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
