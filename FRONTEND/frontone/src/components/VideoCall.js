@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import AgoraRTC from 'agora-rtc-sdk-ng';
 import config from '../config';
 import axios from 'axios';
 import io from 'socket.io-client';
