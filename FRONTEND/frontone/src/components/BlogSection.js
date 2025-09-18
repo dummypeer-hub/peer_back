@@ -195,6 +195,17 @@ const BlogSection = ({ user, userRole }) => {
     setNewComment('');
   };
 
+  if (!user || !user.id) {
+    return (
+      <div className="blog-section">
+        <div className="blog-header">
+          <h2>Loading...</h2>
+        </div>
+        <div className="loading">Please wait while we load your data...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="blog-section">
       <div className="blog-header">

@@ -7,32 +7,16 @@ const VideoCallPage = () => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    console.log('VideoCallPage: Loading user data');
-    
-    // Try to get user data from videoCallUser first, then regular user
-    let userData = localStorage.getItem('videoCallUser') || localStorage.getItem('user');
-    
+    // Get user from localStorage (same window, so data should be available)
+    const userData = localStorage.getItem('user');
     if (userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        console.log('VideoCallPage: Found user data:', parsedUser);
-        setUser(parsedUser);
-        
-        // Ensure token is available
-        const token = localStorage.getItem('videoCallToken') || localStorage.getItem('token');
-        if (token) {
-          localStorage.setItem('token', token);
-        }
-      } catch (e) {
-        console.error('Failed to parse user data:', e);
-      }
-    } else {
-      console.log('VideoCallPage: No user data found');
+      setUser(JSON.parse(userData));
     }
   }, []);
 
   const handleEndCall = () => {
-    window.close();
+    // Navigate back to dashboard
+    window.location.href = '/';
   };
 
   if (!user) {
