@@ -92,8 +92,13 @@ const SessionsPanel = ({ user, onJoinSession }) => {
         mentorId: user.id
       });
       
-      // Navigate to video call in same window
-      window.location.href = `/video-call/${callId}`;
+      console.log('Accept call - calling onJoinSession:', { callId, hasCallback: !!onJoinSession });
+      // Use onJoinSession callback to handle video call in same component
+      if (onJoinSession) {
+        onJoinSession(callId, channelName);
+      } else {
+        console.error('No onJoinSession callback provided for accept call');
+      }
       
       // Refresh sessions to update status
       loadSessions();
@@ -115,8 +120,13 @@ const SessionsPanel = ({ user, onJoinSession }) => {
   };
 
   const handleJoinSession = (callId, channelName) => {
-    // Navigate to video call in same window
-    window.location.href = `/video-call/${callId}`;
+    console.log('SessionsPanel handleJoinSession called:', { callId, channelName, hasCallback: !!onJoinSession });
+    // Use onJoinSession callback to handle video call in same component
+    if (onJoinSession) {
+      onJoinSession(callId, channelName);
+    } else {
+      console.error('No onJoinSession callback provided to SessionsPanel');
+    }
   };
 
   const handleDeleteSession = async (sessionId) => {

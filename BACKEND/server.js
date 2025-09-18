@@ -25,8 +25,8 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 // Agora configuration
-const AGORA_APP_ID = '1646d8e04dfb4a4b803ce4acea826920';
-const AGORA_APP_CERTIFICATE = 'c68f152c0b82444f9a94449682a74b82';
+const AGORA_APP_ID = process.env.AGORA_APP_ID || '1646d8e04dfb4a4b803ce4acea826920';
+const AGORA_APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE || 'c68f152c0b82444f9a94449682a74b82';
 
 // Simple in-memory cache
 const cache = new Map();
@@ -1278,14 +1278,24 @@ app.post('/api/video-call/token', async (req, res) => {
   try {
     const { channelName, uid, role } = req.body;
     
+    console.log('Token request:', { channelName, uid, role });
+    console.log('Agora config:', { appId: AGORA_APP_ID, hasCertificate: !!AGORA_APP_CERTIFICATE });
+    
     if (!channelName || !uid) {
       return res.status(400).json({ error: 'Channel name and UID are required' });
+    }
+    
+    if (!AGORA_APP_ID || !AGORA_APP_CERTIFICATE) {
+      console.error('Missing Agora credentials');
+      return res.status(500).json({ error: 'Agora credentials not configured' });
     }
     
     const roleType = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER;
     const expirationTimeInSeconds = 3600; // 1 hour
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+    
+    console.log('Generating token with:', { roleType, privilegeExpiredTs });
     
     const token = RtcTokenBuilder.buildTokenWithUid(
       AGORA_APP_ID,
@@ -1296,10 +1306,12 @@ app.post('/api/video-call/token', async (req, res) => {
       privilegeExpiredTs
     );
     
+    console.log('Token generated successfully, length:', token.length);
+    
     res.json({ token, appId: AGORA_APP_ID });
   } catch (error) {
     console.error('Token generation error:', error);
-    res.status(500).json({ error: 'Failed to generate token' });
+    res.status(500).json({ error: 'Failed to generate token: ' + error.message });
   }
 });
 
