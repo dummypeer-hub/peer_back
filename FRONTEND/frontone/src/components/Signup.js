@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import config from '../config';
 import './Auth.css';
 
 const Signup = ({ onSignup, onSwitchToLogin }) => {
@@ -35,7 +36,7 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     if (formData.username.length < 3) return;
     
     try {
-      const response = await axios.post('http://localhost:5000/api/check-username', {
+      const response = await axios.post(`${config.API_BASE_URL}/check-username`, {
         username: formData.username
       });
       setUsernameAvailable(response.data.available);
@@ -50,7 +51,7 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:5000/api/signup', formData);
+      const response = await axios.post(`${config.API_BASE_URL}/signup`, formData);
       setTempUserId(response.data.tempUserId);
       setStep(3);
     } catch (error) {
@@ -65,7 +66,7 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/verify-signup', {
+      const response = await axios.post(`${config.API_BASE_URL}/verify-signup`, {
         otp,
         tempUserId
       });
