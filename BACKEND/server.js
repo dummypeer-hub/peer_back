@@ -58,15 +58,13 @@ const pool = new Pool({
 
 // Email transporter
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  host: 'in-v3.mailjet.com',
+  port: 587,
+  secure: false,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 5000,
-  socketTimeout: 5000
+    user: process.env.MAILJET_API_KEY,
+    pass: process.env.MAILJET_SECRET_KEY
+  }
 });
 
 // Test database connection and create tables
@@ -147,7 +145,7 @@ const sendOTPEmail = async (email, otp, purpose) => {
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+    from: process.env.MAILJET_SENDER_EMAIL,
     to: email,
     subject,
     html
