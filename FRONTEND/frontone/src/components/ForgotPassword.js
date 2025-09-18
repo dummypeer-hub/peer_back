@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import config from '../config';
 import './Auth.css';
 
 const ForgotPassword = ({ onBack }) => {
@@ -17,7 +18,7 @@ const ForgotPassword = ({ onBack }) => {
     setError('');
 
     try {
-      await axios.post('http://localhost:5000/api/forgot-password', { email });
+      await axios.post(`${config.API_BASE_URL}/forgot-password`, { email });
       setStep(2);
       setSuccess('OTP sent to your email');
     } catch (error) {
@@ -33,7 +34,7 @@ const ForgotPassword = ({ onBack }) => {
     setError('');
 
     try {
-      await axios.post('http://localhost:5000/api/reset-password', {
+      await axios.post(`${config.API_BASE_URL}/reset-password`, {
         email,
         otp,
         newPassword

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import config from '../config';
 import './CreateBlog.css';
 
 const CreateBlog = ({ user, onBack }) => {
@@ -83,7 +84,7 @@ const CreateBlog = ({ user, onBack }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:5000/api/blogs', {
+      await axios.post(`${config.API_BASE_URL}/blogs`, {
         mentorId: user.id,
         ...formData
       }, {

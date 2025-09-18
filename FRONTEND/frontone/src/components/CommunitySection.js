@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import './CommunitySection.css';
 
 const CommunitySection = ({ user, userRole }) => {
@@ -23,8 +24,8 @@ const CommunitySection = ({ user, userRole }) => {
     try {
       const token = localStorage.getItem('token');
       const url = userRole === 'mentor' 
-        ? `http://localhost:5000/api/communities/mentor/${user.id}`
-        : `http://localhost:5000/api/mentee/${user.id}/communities`;
+        ? `${config.API_BASE_URL}/communities/mentor/${user.id}`
+        : `${config.API_BASE_URL}/mentee/${user.id}/communities`;
       
       const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` }
@@ -40,7 +41,7 @@ const CommunitySection = ({ user, userRole }) => {
   const loadPosts = async (communityId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/communities/${communityId}/posts`, {
+      const response = await axios.get(`${config.API_BASE_URL}/communities/${communityId}/posts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const sortedPosts = (response.data.posts || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -63,7 +64,7 @@ const CommunitySection = ({ user, userRole }) => {
       const reactions = {};
       
       for (const post of posts) {
-        const response = await axios.get(`http://localhost:5000/api/communities/posts/${post.id}/reactions`, {
+        const response = await axios.get(`${config.API_BASE_URL}/communities/posts/${post.id}/reactions`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         reactions[post.id] = response.data.reactions || {};
@@ -102,7 +103,7 @@ const CommunitySection = ({ user, userRole }) => {
               postType: 'file'
             };
             
-            await axios.post(`http://localhost:5000/api/communities/${selectedCommunity.id}/posts`, {
+            await axios.post(`${config.API_BASE_URL}/communities/${selectedCommunity.id}/posts`, {
               mentorId: user.id,
               content: newPost.content,
               fileUrl: fileData.fileUrl,
@@ -126,7 +127,7 @@ const CommunitySection = ({ user, userRole }) => {
         reader.readAsDataURL(newPost.file);
       } else {
         try {
-          await axios.post(`http://localhost:5000/api/communities/${selectedCommunity.id}/posts`, {
+          await axios.post(`${config.API_BASE_URL}/communities/${selectedCommunity.id}/posts`, {
             mentorId: user.id,
             content: newPost.content,
             postType: 'text'
@@ -152,7 +153,7 @@ const CommunitySection = ({ user, userRole }) => {
   const handleReact = async (postId, reactionType) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/communities/posts/${postId}/react`, {
+      await axios.post(`${config.API_BASE_URL}/communities/posts/${postId}/react`, {
         userId: user.id,
         reactionType
       }, {
@@ -404,7 +405,7 @@ const CreateCommunityForm = ({ user, onBack, onSuccess }) => {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:5000/api/communities', {
+      await axios.post(`${config.API_BASE_URL}/communities`, {
         mentorId: user.id,
         ...formData
       }, {

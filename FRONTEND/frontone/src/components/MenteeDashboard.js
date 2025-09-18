@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import BlogSection from './BlogSection';
 import NotificationPanel from './NotificationPanel';
 import CommunityBrowser from './CommunityBrowser';
@@ -44,7 +45,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       }
       
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/mentors', {
+      const response = await axios.get(`${config.API_BASE_URL}/mentors`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -250,7 +251,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const loadFavorites = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/mentee/${user.id}/favorites`, {
+      const response = await axios.get(`${config.API_BASE_URL}/mentee/${user.id}/favorites`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setFavorites(response.data.favorites || []);
@@ -264,7 +265,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       console.log('Initiating call to mentor:', mentorId);
       const channelName = `call_${Date.now()}_${user.id}_${mentorId}`;
       
-      const response = await axios.post('http://localhost:5000/api/video-call/request', {
+      const response = await axios.post(`${config.API_BASE_URL}/video-call/request`, {
         menteeId: user.id,
         mentorId,
         channelName
@@ -286,7 +287,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const handleFavorite = async (mentorId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:5000/api/mentee/favorite', {
+      const response = await axios.post(`${config.API_BASE_URL}/mentee/favorite`, {
         menteeId: user.id,
         mentorId
       }, {
@@ -306,7 +307,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const loadUnreadCount = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/notifications/${user.id}`, {
+      const response = await axios.get(`${config.API_BASE_URL}/notifications/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const unread = response.data.notifications?.filter(n => !n.is_read).length || 0;

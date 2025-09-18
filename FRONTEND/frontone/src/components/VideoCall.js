@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import AgoraRTC from 'agora-rtc-sdk-ng';
+import config from '../config';
 import axios from 'axios';
 import io from 'socket.io-client';
 import './VideoCall.css';
@@ -32,7 +32,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    const socketConnection = io('http://localhost:5000');
+    const socketConnection = io('https://peerversefinal-production.up.railway.app');
     setSocket(socketConnection);
     
     socketConnection.emit('join_call', callId);
@@ -145,7 +145,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       console.log('Initializing call for user:', user.id);
       
       // Get Agora token
-      const tokenResponse = await axios.post('http://localhost:5000/api/video-call/token', {
+      const tokenResponse = await axios.post(`${config.API_BASE_URL}/video-call/token`, {
         channelName: `call_${callId}`,
         uid: user.id,
         role: 'publisher'
@@ -187,7 +187,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       
       // Check if session is already started
       try {
-        const statusResponse = await axios.get(`http://localhost:5000/api/video-call/${callId}/status`);
+        const statusResponse = await axios.get(`${config.API_BASE_URL}/video-call/${callId}/status`);
         const call = statusResponse.data.call;
         
         if (call.status === 'active' && call.started_at) {
@@ -207,7 +207,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
           } else {
             // Session expired, mark as completed
             console.log('Session expired, marking as completed');
-            await axios.post(`http://localhost:5000/api/video-call/${callId}/end`, {
+            await axios.post(`${config.API_BASE_URL}/video-call/${callId}/end`, {
               userId: user.id,
               reason: 'time_expired'
             });
@@ -482,7 +482,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
         socket.emit('user_left', { callId, userId: user.id, username: user.username });
       }
       
-      await axios.post(`http://localhost:5000/api/video-call/${callId}/end`, {
+      await axios.post(`${config.API_BASE_URL}/video-call/${callId}/end`, {
         userId: user.id
       });
     } catch (error) {
@@ -500,7 +500,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
         socket.emit('force_end_call', { callId });
       }
       
-      await axios.post(`http://localhost:5000/api/video-call/${callId}/end`, {
+      await axios.post(`${config.API_BASE_URL}/video-call/${callId}/end`, {
         userId: user.id,
         reason: 'time_limit'
       });
@@ -832,7 +832,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
             onClick={async () => {
               // Double check if session was already started
               try {
-                const statusResponse = await axios.get(`http://localhost:5000/api/video-call/${callId}/status`);
+                const statusResponse = await axios.get(`${config.API_BASE_URL}/video-call/${callId}/status`);
                 const call = statusResponse.data.call;
                 
                 if (call.started_at) {
@@ -856,7 +856,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
               setSessionStartTime(startTime);
               
               try {
-                const response = await axios.post(`http://localhost:5000/api/video-call/${callId}/start`, {
+                const response = await axios.post(`${config.API_BASE_URL}/video-call/${callId}/start`, {
                   userId: user.id,
                   startTime: startTime.toISOString()
                 });

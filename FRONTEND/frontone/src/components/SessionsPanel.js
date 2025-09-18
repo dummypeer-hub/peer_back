@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import io from 'socket.io-client';
 import './SessionsPanel.css';
 
@@ -9,7 +10,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const socketConnection = io('http://localhost:5000');
+    const socketConnection = io('https://peerversefinal-production.up.railway.app');
     setSocket(socketConnection);
     
     socketConnection.emit('join_user_room', user.id);
@@ -58,7 +59,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
     // Auto-complete expired sessions
     for (const session of expiredSessions) {
       try {
-        await axios.post(`http://localhost:5000/api/video-call/${session.id}/end`, {
+        await axios.post(`${config.API_BASE_URL}/video-call/${session.id}/end`, {
           userId: user.id,
           reason: 'time_expired'
         });
@@ -74,7 +75,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
 
   const loadSessions = async () => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/video-calls/${user.id}`, {
+      const response = await axios.get(`${config.API_BASE_URL}/video-calls/${user.id}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setSessions(response.data.calls || []);
@@ -87,7 +88,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
 
   const handleAcceptCall = async (callId) => {
     try {
-      const response = await axios.post(`http://localhost:5000/api/video-call/${callId}/accept`, {
+      const response = await axios.post(`${config.API_BASE_URL}/video-call/${callId}/accept`, {
         mentorId: user.id
       });
       
@@ -104,7 +105,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
 
   const handleRejectCall = async (callId) => {
     try {
-      await axios.post(`http://localhost:5000/api/video-call/${callId}/reject`, {
+      await axios.post(`${config.API_BASE_URL}/video-call/${callId}/reject`, {
         mentorId: user.id
       });
       
@@ -122,7 +123,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
 
   const handleDeleteSession = async (sessionId) => {
     try {
-      await axios.delete(`http://localhost:5000/api/video-call/${sessionId}`, {
+      await axios.delete(`${config.API_BASE_URL}/video-call/${sessionId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       
@@ -298,7 +299,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
                       // Auto-update session to completed
                       setTimeout(async () => {
                         try {
-                          await axios.post(`http://localhost:5000/api/video-call/${session.id}/end`, {
+                          await axios.post(`${config.API_BASE_URL}/video-call/${session.id}/end`, {
                             userId: user.id,
                             reason: 'time_expired'
                           });

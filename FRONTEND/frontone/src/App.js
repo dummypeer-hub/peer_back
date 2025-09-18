@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import axios from 'axios';
+import config from './config';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import ForgotPassword from './components/ForgotPassword';
@@ -38,7 +39,7 @@ function App() {
   const loadProfileData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/mentor/profile/${user.id}`, {
+      const response = await axios.get(`${config.API_BASE_URL}/mentor/profile/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.profile) {

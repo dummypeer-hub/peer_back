@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import './MentorProfile.css';
 
 const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
@@ -42,7 +43,7 @@ const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/mentor/profile/${user.id}`, {
+      const response = await axios.get(`${config.API_BASE_URL}/mentor/profile/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.profile) {
@@ -190,7 +191,7 @@ const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
           sectionData = profileData[currentSection];
       }
       
-      await axios.patch(`http://localhost:5000/api/mentor/profile/${user.id}/section`, {
+      await axios.patch(`${config.API_BASE_URL}/mentor/profile/${user.id}/section`, {
         section: currentSection,
         data: sectionData
       }, {
@@ -215,7 +216,7 @@ const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
     setError('');
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:5000/api/mentor/profile/${user.id}`, profileData, {
+      await axios.put(`${config.API_BASE_URL}/mentor/profile/${user.id}`, profileData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       onSave(profileData);

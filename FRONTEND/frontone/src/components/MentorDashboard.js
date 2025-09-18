@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import MentorProfileEditor from './MentorProfileEditor';
 import BlogSection from './BlogSection';
 import CreateBlog from './CreateBlog';
@@ -53,7 +53,7 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/notifications/${user.id}`, {
+      const response = await axios.get(`${config.API_BASE_URL}/notifications/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -69,7 +69,7 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
   const loadProfileData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/mentor/profile/${user.id}`, {
+      const response = await axios.get(`${config.API_BASE_URL}/mentor/profile/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.profile) {
@@ -271,7 +271,7 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
           onClick={async () => {
             try {
               const token = localStorage.getItem('token');
-              await axios.delete(`http://localhost:5000/api/notifications/${user.id}`, {
+              await axios.delete(`${config.API_BASE_URL}/notifications/${user.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
               setNotifications([]);

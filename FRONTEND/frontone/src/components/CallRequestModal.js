@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import io from 'socket.io-client';
 import './CallRequestModal.css';
 
@@ -10,7 +11,7 @@ const CallRequestModal = ({ user, onCallStart, onClose }) => {
   useEffect(() => {
     if (!user || !user.id || user.role === 'mentor') return;
     
-    const socketConnection = io('http://localhost:5000');
+    const socketConnection = io('https://peerversefinal-production.up.railway.app');
     setSocket(socketConnection);
     
     socketConnection.emit('join_user_room', user.id);
@@ -40,7 +41,7 @@ const CallRequestModal = ({ user, onCallStart, onClose }) => {
 
   const acceptCall = async () => {
     try {
-      await axios.post(`http://localhost:5000/api/video-call/${incomingCall.callId}/accept`, {
+      await axios.post(`${config.API_BASE_URL}/video-call/${incomingCall.callId}/accept`, {
         mentorId: user.id
       });
       
@@ -53,7 +54,7 @@ const CallRequestModal = ({ user, onCallStart, onClose }) => {
 
   const rejectCall = async () => {
     try {
-      await axios.post(`http://localhost:5000/api/video-call/${incomingCall.callId}/reject`, {
+      await axios.post(`${config.API_BASE_URL}/video-call/${incomingCall.callId}/reject`, {
         mentorId: user.id
       });
       

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import config from '../config';
 
 const VideoCallTest = ({ user }) => {
   const [testResult, setTestResult] = useState('');
@@ -9,7 +10,7 @@ const VideoCallTest = ({ user }) => {
       setTestResult('Testing video call API...');
       
       // Test token generation
-      const tokenResponse = await axios.post('http://localhost:5000/api/video-call/token', {
+      const tokenResponse = await axios.post('${config.API_BASE_URL}/video-call/token', {
         channelName: 'test_channel',
         uid: user.id,
         role: 'publisher'

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import './NotificationPanel.css';
 
 const NotificationPanel = ({ user, isOpen, onClose }) => {
@@ -16,7 +17,7 @@ const NotificationPanel = ({ user, isOpen, onClose }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/notifications/${user.id}`, {
+      const response = await axios.get(`${config.API_BASE_URL}/notifications/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(response.data.notifications || []);
@@ -30,7 +31,7 @@ const NotificationPanel = ({ user, isOpen, onClose }) => {
   const markAllAsRead = async () => {
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:5000/api/notifications/${user.id}/read`, {}, {
+      await axios.put(`${config.API_BASE_URL}/notifications/${user.id}/read`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(notifications.map(n => ({ ...n, is_read: true })));
@@ -42,7 +43,7 @@ const NotificationPanel = ({ user, isOpen, onClose }) => {
   const clearAllNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/notifications/${user.id}`, {
+      await axios.delete(`${config.API_BASE_URL}/notifications/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications([]);

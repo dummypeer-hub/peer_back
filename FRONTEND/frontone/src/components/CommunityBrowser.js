@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config';
 import CommunitySection from './CommunitySection';
 import './CommunityBrowser.css';
 
@@ -19,7 +20,7 @@ const CommunityBrowser = ({ user }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/communities', {
+      const response = await axios.get(`${config.API_BASE_URL}/communities`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setAvailableCommunities(response.data.communities || []);
@@ -33,7 +34,7 @@ const CommunityBrowser = ({ user }) => {
   const loadJoinedCommunities = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5000/api/mentee/${user.id}/communities`, {
+      const response = await axios.get(`${config.API_BASE_URL}/mentee/${user.id}/communities`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setJoinedCommunities(response.data.communities || []);
@@ -45,7 +46,7 @@ const CommunityBrowser = ({ user }) => {
   const handleJoinCommunity = async (communityId) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/communities/${communityId}/join`, {
+      await axios.post(`${config.API_BASE_URL}/communities/${communityId}/join`, {
         menteeId: user.id
       }, {
         headers: { Authorization: `Bearer ${token}` }
