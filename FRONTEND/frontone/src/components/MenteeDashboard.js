@@ -730,9 +730,9 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       {currentSection === 'sessions' && (
         <SessionsPanel 
           user={user} 
-          onJoinSession={onJoinSession || ((callId, channelName) => {
+          onJoinSession={(callId, channelName) => {
             setActiveCall({ callId, channelName });
-          })}
+          }}
         />
       )}
 
