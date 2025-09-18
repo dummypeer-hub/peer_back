@@ -7,50 +7,28 @@ const VideoCallPage = () => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    console.log('VideoCallPage: Attempting to get user data');
+    console.log('VideoCallPage: Loading user data');
     
-    // Try multiple methods to get user data
-    let userData = localStorage.getItem('user');
+    // Try to get user data from videoCallUser first, then regular user
+    let userData = localStorage.getItem('videoCallUser') || localStorage.getItem('user');
     
     if (userData) {
-      console.log('VideoCallPage: Found user in localStorage');
-      setUser(JSON.parse(userData));
-      return;
-    }
-    
-    // Try URL params
-    const urlParams = new URLSearchParams(window.location.search);
-    const userParam = urlParams.get('user');
-    if (userParam) {
       try {
-        console.log('VideoCallPage: Found user in URL params');
-        const parsedUser = JSON.parse(decodeURIComponent(userParam));
+        const parsedUser = JSON.parse(userData);
+        console.log('VideoCallPage: Found user data:', parsedUser);
         setUser(parsedUser);
-        // Store in localStorage for future use
-        localStorage.setItem('user', JSON.stringify(parsedUser));
-        return;
-      } catch (e) {
-        console.error('Failed to parse user from URL:', e);
-      }
-    }
-    
-    // Try to get from parent window
-    if (window.opener && window.opener.localStorage) {
-      try {
-        const parentUserData = window.opener.localStorage.getItem('user');
-        if (parentUserData) {
-          console.log('VideoCallPage: Found user in parent window');
-          const parsedUser = JSON.parse(parentUserData);
-          setUser(parsedUser);
-          localStorage.setItem('user', JSON.stringify(parsedUser));
-          return;
+        
+        // Ensure token is available
+        const token = localStorage.getItem('videoCallToken') || localStorage.getItem('token');
+        if (token) {
+          localStorage.setItem('token', token);
         }
       } catch (e) {
-        console.error('Failed to get user from parent window:', e);
+        console.error('Failed to parse user data:', e);
       }
+    } else {
+      console.log('VideoCallPage: No user data found');
     }
-    
-    console.log('VideoCallPage: No user data found');
   }, []);
 
   const handleEndCall = () => {

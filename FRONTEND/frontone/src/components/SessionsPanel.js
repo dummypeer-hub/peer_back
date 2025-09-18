@@ -93,8 +93,10 @@ const SessionsPanel = ({ user, onJoinSession }) => {
       });
       
       // Open video call in new window after accepting
-      const userParam = encodeURIComponent(JSON.stringify(user));
-      const callUrl = `${window.location.origin}/video-call/${callId}?user=${userParam}`;
+      localStorage.setItem('videoCallUser', JSON.stringify(user));
+      localStorage.setItem('videoCallToken', localStorage.getItem('token'));
+      
+      const callUrl = `${window.location.origin}/video-call/${callId}`;
       window.open(callUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
       
       // Refresh sessions to update status
@@ -117,9 +119,12 @@ const SessionsPanel = ({ user, onJoinSession }) => {
   };
 
   const handleJoinSession = (callId, channelName) => {
-    // Open video call in new window with user data
-    const userParam = encodeURIComponent(JSON.stringify(user));
-    const callUrl = `${window.location.origin}/video-call/${callId}?user=${userParam}`;
+    // Store user data in localStorage for the new window
+    localStorage.setItem('videoCallUser', JSON.stringify(user));
+    localStorage.setItem('videoCallToken', localStorage.getItem('token'));
+    
+    // Open video call in new window
+    const callUrl = `${window.location.origin}/video-call/${callId}`;
     window.open(callUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
   };
 
