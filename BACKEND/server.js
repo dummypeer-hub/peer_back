@@ -3,7 +3,10 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-const nodemailer = require('nodemailer');
+const mailjet = require('node-mailjet').apiConnect(
+  process.env.MAILJET_API_KEY,
+  process.env.MAILJET_SECRET_KEY
+);
 const rateLimit = require('express-rate-limit');
 const { RtcTokenBuilder, RtcRole } = require('agora-token');
 const http = require('http');
@@ -56,16 +59,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Email transporter
-const transporter = nodemailer.createTransport({
-  host: 'in-v3.mailjet.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.MAILJET_API_KEY,
-    pass: process.env.MAILJET_SECRET_KEY
-  }
-});
+// Mailjet email service
 
 // Test database connection and create tables
 pool.connect(async (err, client, release) => {
@@ -144,12 +138,25 @@ const sendOTPEmail = async (email, otp, purpose) => {
     <p>This code will expire in 10 minutes.</p>
   `;
 
-  await transporter.sendMail({
-    from: process.env.MAILJET_SENDER_EMAIL,
-    to: email,
-    subject,
-    html
+  const request = mailjet.post('send', { version: 'v3.1' }).request({
+    Messages: [
+      {
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL,
+          Name: 'PeerSync'
+        },
+        To: [
+          {
+            Email: email
+          }
+        ],
+        Subject: subject,
+        HTMLPart: html
+      }
+    ]
   });
+  
+  await request;
 };
 
 // Check username availability
