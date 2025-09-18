@@ -15,47 +15,38 @@ const BlogSection = ({ user, userRole }) => {
   const [lastFetch, setLastFetch] = useState(null);
 
   useEffect(() => {
-    // Only fetch if we haven't fetched recently (cache for 10 minutes)
-    const now = Date.now();
-    if (!lastFetch || now - lastFetch > 10 * 60 * 1000) {
+    if (user && user.id) {
       loadBlogs();
       if (userRole === 'mentee') {
         loadLikedBlogs();
       }
-      setLastFetch(now);
     }
-  }, [userRole, lastFetch]);
+  }, [user, userRole]);
 
   const loadBlogs = async () => {
+    if (!user || !user.id) {
+      console.log('No user data available for loading blogs');
+      return;
+    }
+    
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '/api' : '${config.API_BASE_URL}';
       const url = userRole === 'mentor' 
-        ? `${apiBase}/blogs/mentor/${user.id}`
-        : `${apiBase}/blogs`;
+        ? `${config.API_BASE_URL}/blogs/mentor/${user.id}`
+        : `${config.API_BASE_URL}/blogs`;
       
-      // Check localStorage cache first
-      const cacheKey = `blogs_${userRole}_${user.id}`;
-      const cached = localStorage.getItem(cacheKey);
-      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-      
-      if (cached && cacheTime && Date.now() - parseInt(cacheTime) < 10 * 60 * 1000) {
-        setBlogs(JSON.parse(cached));
-        setLoading(false);
-        return;
-      }
+      console.log('Loading blogs from URL:', url);
+      console.log('User role:', userRole, 'User ID:', user.id);
       
       const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
+      console.log('Blogs API response:', response.data);
       const blogsData = response.data.blogs || [];
+      console.log('Setting blogs data:', blogsData);
       setBlogs(blogsData);
-      
-      // Cache the result
-      localStorage.setItem(cacheKey, JSON.stringify(blogsData));
-      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
     } catch (error) {
       console.error('Failed to load blogs:', error);
     } finally {
