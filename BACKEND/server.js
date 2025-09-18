@@ -58,16 +58,14 @@ const pool = new Pool({
 
 // Email transporter
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  tls: {
-    rejectUnauthorized: false
-  }
+  connectionTimeout: 10000,
+  greetingTimeout: 5000,
+  socketTimeout: 10000
 });
 
 // Test database connection and create tables
@@ -197,30 +195,24 @@ app.post('/api/signup', async (req, res) => {
 
     // Generate and send OTP
     const otp = generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    console.log('Inserting OTP for email:', email);
     await pool.query(
       'INSERT INTO otp_codes (email, otp_code, purpose, expires_at) VALUES ($1, $2, $3, $4)',
       [email, otp, 'signup', expiresAt]
     );
 
-    console.log('Sending OTP email to:', email);
     try {
       await sendOTPEmail(email, otp, 'signup');
-      console.log('OTP email sent successfully');
+      const tempUserData = { username, email, phone, password: hashedPassword, role };
+      res.json({ 
+        message: 'OTP sent to email. Please verify to complete signup.',
+        tempUserId: Buffer.from(JSON.stringify(tempUserData)).toString('base64')
+      });
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
-      // Continue without failing - for development
+      res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
     }
-
-    // Store user data temporarily
-    const tempUserData = { username, email, phone, password: hashedPassword, role };
-    
-    res.json({ 
-      message: 'OTP sent to email. Please verify to complete signup.',
-      tempUserId: Buffer.from(JSON.stringify(tempUserData)).toString('base64')
-    });
   } catch (error) {
     console.error('Signup error:', error);
     res.status(500).json({ error: 'Server error: ' + error.message });
@@ -298,12 +290,16 @@ app.post('/api/login', async (req, res) => {
       [user.email, otp, 'login', expiresAt]
     );
 
-    await sendOTPEmail(user.email, otp, 'login');
-
-    res.json({
-      message: 'OTP sent to email for verification',
-      userId: user.id
-    });
+    try {
+      await sendOTPEmail(user.email, otp, 'login');
+      res.json({
+        message: 'OTP sent to email for verification',
+        userId: user.id
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
