@@ -7,10 +7,21 @@ const VideoCallPage = () => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // Get user from localStorage
+    // Get user from localStorage or URL params
     const userData = localStorage.getItem('user');
     if (userData) {
       setUser(JSON.parse(userData));
+    } else {
+      // If no localStorage, try to get from URL params or use default
+      const urlParams = new URLSearchParams(window.location.search);
+      const userParam = urlParams.get('user');
+      if (userParam) {
+        try {
+          setUser(JSON.parse(decodeURIComponent(userParam)));
+        } catch (e) {
+          console.error('Failed to parse user from URL:', e);
+        }
+      }
     }
   }, []);
 

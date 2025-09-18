@@ -208,6 +208,14 @@ const BlogSection = ({ user, userRole }) => {
     <div className="blog-section">
       <div className="blog-header">
         <h2>{userRole === 'mentor' ? 'My Blogs' : 'Latest Blogs'}</h2>
+        <button onClick={() => {
+          // Clear cache and reload
+          const cacheKey = `blogs_${userRole}_${user.id}`;
+          localStorage.removeItem(cacheKey);
+          localStorage.removeItem(`${cacheKey}_time`);
+          setLastFetch(null);
+          loadBlogs();
+        }} className="refresh-btn">🔄 Refresh</button>
       </div>
 
       {loading ? (
