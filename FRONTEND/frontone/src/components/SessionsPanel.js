@@ -95,7 +95,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
       console.log('Accept call - calling onJoinSession:', { callId, hasCallback: !!onJoinSession });
       // Use onJoinSession callback to handle video call in same component
       if (onJoinSession) {
-        onJoinSession(callId, channelName);
+        onJoinSession(callId, null);
       } else {
         console.error('No onJoinSession callback provided for accept call');
       }
