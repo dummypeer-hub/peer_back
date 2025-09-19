@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import VideoCall from './VideoCall';
+import ZoomVideoCall from './ZoomVideoCall';
 
 const MentorCallHandler = ({ user, children }) => {
   const [activeCall, setActiveCall] = useState(null);
@@ -16,7 +16,7 @@ const MentorCallHandler = ({ user, children }) => {
 
   if (activeCall) {
     return (
-      <VideoCall 
+      <ZoomVideoCall 
         callId={activeCall.callId}
         user={user}
         onEndCall={handleCallEnd}

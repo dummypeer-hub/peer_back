@@ -8,7 +8,7 @@ const mailjet = require('node-mailjet').apiConnect(
   process.env.MAILJET_SECRET_KEY
 );
 const rateLimit = require('express-rate-limit');
-const { RtcTokenBuilder, RtcRole } = require('agora-token');
+const axios = require('axios');
 const http = require('http');
 const { Server } = require('socket.io');
 require('dotenv').config();
@@ -24,9 +24,10 @@ const io = new Server(server, {
 });
 const PORT = process.env.PORT || 3000;
 
-// Agora configuration
-const AGORA_APP_ID = process.env.AGORA_APP_ID || '1646d8e04dfb4a4b803ce4acea826920';
-const AGORA_APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE || 'c68f152c0b82444f9a94449682a74b82';
+// Zoom configuration
+const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID;
+const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET;
+const ZOOM_REDIRECT_URI = process.env.ZOOM_REDIRECT_URI;
 
 // Simple in-memory cache
 const cache = new Map();
@@ -68,14 +69,17 @@ pool.connect(async (err, client, release) => {
   } else {
     console.log('Database connected successfully');
     
-    // Create video_calls table if it doesn't exist
+    // Create video_calls and zoom_tokens tables
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS video_calls (
           id SERIAL PRIMARY KEY,
           mentee_id INTEGER NOT NULL REFERENCES users(id),
           mentor_id INTEGER NOT NULL REFERENCES users(id),
-          channel_name VARCHAR(255) NOT NULL,
+          channel_name VARCHAR(255),
+          zoom_meeting_id VARCHAR(255),
+          join_url TEXT,
+          start_url TEXT,
           status VARCHAR(50) DEFAULT 'pending',
           created_at TIMESTAMP DEFAULT NOW(),
           accepted_at TIMESTAMP,
@@ -85,11 +89,24 @@ pool.connect(async (err, client, release) => {
           CONSTRAINT valid_status CHECK (status IN ('pending', 'accepted', 'rejected', 'active', 'completed', 'cancelled'))
         );
         
+        CREATE TABLE IF NOT EXISTS zoom_tokens (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id) UNIQUE,
+          access_token TEXT NOT NULL,
+          refresh_token TEXT NOT NULL,
+          zoom_email VARCHAR(255),
+          zoom_user_id VARCHAR(255),
+          connected_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentor_id ON video_calls(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentee_id ON video_calls(mentee_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_status ON video_calls(status);
+        CREATE INDEX IF NOT EXISTS idx_zoom_tokens_mentor_id ON zoom_tokens(mentor_id);
       `);
-      console.log('Video calls table created/verified successfully');
+      console.log('Video calls and Zoom tokens tables created/verified successfully');
     } catch (tableError) {
       console.error('Error creating video_calls table:', tableError);
     }
@@ -1273,45 +1290,292 @@ app.get('/api/mentee/:menteeId/communities', async (req, res) => {
   }
 });
 
-// Video call endpoints
-app.post('/api/video-call/token', async (req, res) => {
+// Zoom OAuth endpoints
+app.get('/api/zoom/auth-url', (req, res) => {
+  const scopes = 'meeting:write:meeting meeting:read:meeting user:read:user';
+  const authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${ZOOM_CLIENT_ID}&redirect_uri=${encodeURIComponent(ZOOM_REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
+  res.json({ authUrl });
+});
+
+app.post('/api/zoom/callback', async (req, res) => {
   try {
-    const { channelName, uid, role } = req.body;
+    const { code, mentorId } = req.body;
     
-    console.log('Token request:', { channelName, uid, role });
-    console.log('Agora config:', { appId: AGORA_APP_ID, hasCertificate: !!AGORA_APP_CERTIFICATE });
+    // Exchange code for access token
+    const tokenResponse = await axios.post('https://zoom.us/oauth/token', {
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: ZOOM_REDIRECT_URI
+    }, {
+      auth: {
+        username: ZOOM_CLIENT_ID,
+        password: ZOOM_CLIENT_SECRET
+      },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
     
-    if (!channelName || !uid) {
-      return res.status(400).json({ error: 'Channel name and UID are required' });
-    }
+    const { access_token, refresh_token } = tokenResponse.data;
     
-    if (!AGORA_APP_ID || !AGORA_APP_CERTIFICATE) {
-      console.error('Missing Agora credentials');
-      return res.status(500).json({ error: 'Agora credentials not configured' });
-    }
+    // Get Zoom user info for admin tracking
+    const userInfoResponse = await axios.get('https://api.zoom.us/v2/users/me', {
+      headers: {
+        'Authorization': `Bearer ${access_token}`
+      }
+    });
     
-    const roleType = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER;
-    const expirationTimeInSeconds = 3600; // 1 hour
-    const currentTimestamp = Math.floor(Date.now() / 1000);
-    const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+    const zoomUserInfo = userInfoResponse.data;
     
-    console.log('Generating token with:', { roleType, privilegeExpiredTs });
-    
-    const token = RtcTokenBuilder.buildTokenWithUid(
-      AGORA_APP_ID,
-      AGORA_APP_CERTIFICATE,
-      channelName,
-      uid,
-      roleType,
-      privilegeExpiredTs
+    // Store tokens and user info for mentor
+    await pool.query(
+      'INSERT INTO zoom_tokens (mentor_id, access_token, refresh_token, zoom_email, zoom_user_id, connected_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (mentor_id) DO UPDATE SET access_token = $2, refresh_token = $3, zoom_email = $4, zoom_user_id = $5, updated_at = NOW()',
+      [mentorId, access_token, refresh_token, zoomUserInfo.email, zoomUserInfo.id, new Date().toISOString()]
     );
     
-    console.log('Token generated successfully, length:', token.length);
+    // Log for admin tracking
+    console.log(`[ADMIN] Mentor ${mentorId} connected Zoom account: ${zoomUserInfo.email}`);
     
-    res.json({ token, appId: AGORA_APP_ID });
+    res.json({ 
+      message: 'Zoom account connected successfully',
+      zoomEmail: zoomUserInfo.email
+    });
   } catch (error) {
-    console.error('Token generation error:', error);
-    res.status(500).json({ error: 'Failed to generate token: ' + error.message });
+    console.error('Zoom OAuth error:', error);
+    res.status(500).json({ error: 'Failed to connect Zoom account' });
+  }
+});
+
+app.post('/api/zoom/create-meeting', async (req, res) => {
+  try {
+    const { mentorId, topic } = req.body;
+    
+    // Get mentor's Zoom token
+    const tokenResult = await pool.query(
+      'SELECT access_token FROM zoom_tokens WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Mentor has not connected Zoom account' });
+    }
+    
+    const accessToken = tokenResult.rows[0].access_token;
+    
+    // Create Zoom meeting
+    const meetingResponse = await axios.post('https://api.zoom.us/v2/users/me/meetings', {
+      topic: topic || 'PeerSync Mentorship Session',
+      type: 1, // Instant meeting
+      duration: 10, // 10 minutes
+      settings: {
+        host_video: true,
+        participant_video: true,
+        join_before_host: false,
+        mute_upon_entry: true,
+        waiting_room: false,
+        auto_recording: 'none'
+      }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const meeting = meetingResponse.data;
+    
+    // Schedule meeting end after 10 minutes
+    setTimeout(async () => {
+      try {
+        await axios.patch(`https://api.zoom.us/v2/meetings/${meeting.id}/status`, {
+          action: 'end'
+        }, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log(`Meeting ${meeting.id} ended after 10 minutes`);
+      } catch (error) {
+        console.error('Failed to end meeting:', error);
+      }
+    }, 10 * 60 * 1000);
+    
+    res.json({
+      meetingId: meeting.id,
+      joinUrl: meeting.join_url,
+      startUrl: meeting.start_url,
+      password: meeting.password
+    });
+  } catch (error) {
+    console.error('Create meeting error:', error);
+    res.status(500).json({ error: 'Failed to create Zoom meeting' });
+  }
+});
+
+app.post('/api/zoom/end-meeting', async (req, res) => {
+  try {
+    const { meetingId, mentorId } = req.body;
+    
+    if (!mentorId) {
+      return res.status(400).json({ error: 'Only mentors can end meetings' });
+    }
+    
+    // Get mentor's Zoom token
+    const tokenResult = await pool.query(
+      'SELECT access_token FROM zoom_tokens WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Mentor Zoom token not found' });
+    }
+    
+    const accessToken = tokenResult.rows[0].access_token;
+    
+    // End Zoom meeting
+    await axios.patch(`https://api.zoom.us/v2/meetings/${meetingId}/status`, {
+      action: 'end'
+    }, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log(`Meeting ${meetingId} ended via API`);
+    res.json({ message: 'Meeting ended successfully' });
+  } catch (error) {
+    console.error('End meeting error:', error);
+    res.status(500).json({ error: 'Failed to end Zoom meeting' });
+  }
+});
+
+app.get('/api/zoom/status/:mentorId', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    
+    const result = await pool.query(
+      'SELECT zoom_email, connected_at, updated_at FROM zoom_tokens WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.json({ connected: false });
+    }
+    
+    const tokenData = result.rows[0];
+    res.json({
+      connected: true,
+      zoomEmail: tokenData.zoom_email,
+      connectedAt: tokenData.connected_at || tokenData.updated_at
+    });
+  } catch (error) {
+    console.error('Check Zoom status error:', error);
+    res.status(500).json({ error: 'Failed to check Zoom status' });
+  }
+});
+
+app.delete('/api/zoom/disconnect/:mentorId', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    
+    // Get mentor info for logging
+    const mentorResult = await pool.query(
+      'SELECT u.username, zt.zoom_email FROM users u LEFT JOIN zoom_tokens zt ON u.id = zt.mentor_id WHERE u.id = $1',
+      [mentorId]
+    );
+    
+    // Delete Zoom tokens
+    await pool.query(
+      'DELETE FROM zoom_tokens WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    // Log for admin tracking
+    if (mentorResult.rows.length > 0) {
+      const mentor = mentorResult.rows[0];
+      console.log(`[ADMIN] Mentor ${mentorId} (${mentor.username}) disconnected Zoom account: ${mentor.zoom_email}`);
+    }
+    
+    res.json({ message: 'Zoom account disconnected successfully' });
+  } catch (error) {
+    console.error('Disconnect Zoom error:', error);
+    res.status(500).json({ error: 'Failed to disconnect Zoom account' });
+  }
+});
+
+// Admin endpoint to view all Zoom connections
+app.get('/api/admin/zoom-connections', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        u.id as mentor_id,
+        u.username,
+        u.email as mentor_email,
+        zt.zoom_email,
+        zt.zoom_user_id,
+        zt.connected_at,
+        zt.updated_at
+      FROM users u
+      JOIN zoom_tokens zt ON u.id = zt.mentor_id
+      WHERE u.role = 'mentor'
+      ORDER BY zt.connected_at DESC
+    `);
+    
+    res.json({ connections: result.rows });
+  } catch (error) {
+    console.error('Get Zoom connections error:', error);
+    res.status(500).json({ error: 'Failed to get Zoom connections' });
+  }
+});
+
+// Zoom webhook endpoints
+app.post('/webhooks/zoom', async (req, res) => {
+  try {
+    const { event, payload } = req.body;
+    
+    console.log('Zoom webhook received:', event);
+    
+    switch (event) {
+      case 'meeting.started':
+        // Update call status to active
+        await pool.query(
+          'UPDATE video_calls SET status = $1, started_at = $2 WHERE zoom_meeting_id = $3',
+          ['active', new Date().toISOString(), payload.object.id]
+        );
+        break;
+        
+      case 'meeting.ended':
+        // Update call status to completed
+        await pool.query(
+          'UPDATE video_calls SET status = $1, ended_at = $2 WHERE zoom_meeting_id = $3',
+          ['completed', new Date().toISOString(), payload.object.id]
+        );
+        break;
+    }
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Zoom webhook error:', error);
+    res.status(500).send('Error');
+  }
+});
+
+app.post('/webhooks/zoom-deauth', async (req, res) => {
+  try {
+    const { payload } = req.body;
+    
+    // Remove Zoom tokens when app is deauthorized
+    await pool.query(
+      'DELETE FROM zoom_tokens WHERE mentor_id IN (SELECT id FROM users WHERE email = $1)',
+      [payload.user_data_retention]
+    );
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Zoom deauth webhook error:', error);
+    res.status(500).send('Error');
   }
 });
 
@@ -1322,7 +1586,7 @@ app.post('/api/video-call/request', async (req, res) => {
     // Create call session with current server time
     const result = await pool.query(
       'INSERT INTO video_calls (mentee_id, mentor_id, channel_name, status, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [menteeId, mentorId, channelName, 'pending', new Date().toISOString()]
+      [menteeId, mentorId, channelName || `call_${Date.now()}`, 'pending', new Date().toISOString()]
     );
     
     const callSession = result.rows[0];
@@ -1351,12 +1615,6 @@ app.post('/api/video-call/:callId/accept', async (req, res) => {
     const { callId } = req.params;
     const { mentorId } = req.body;
     
-    // Update call status
-    await pool.query(
-      'UPDATE video_calls SET status = $1, accepted_at = $2 WHERE id = $3 AND mentor_id = $4',
-      ['accepted', new Date().toISOString(), callId, mentorId]
-    );
-    
     // Get call details
     const call = await pool.query(
       'SELECT * FROM video_calls WHERE id = $1',
@@ -1367,11 +1625,56 @@ app.post('/api/video-call/:callId/accept', async (req, res) => {
       return res.status(404).json({ error: 'Call not found' });
     }
     
-    const callData = call.rows[0];
+    // Get mentor's Zoom token
+    const tokenResult = await pool.query(
+      'SELECT access_token FROM zoom_tokens WHERE mentor_id = $1',
+      [mentorId]
+    );
     
-    // Real-time notification removed for Vercel compatibility
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Mentor has not connected Zoom account' });
+    }
     
-    res.json({ message: 'Call accepted', channelName: callData.channel_name });
+    const accessToken = tokenResult.rows[0].access_token;
+    
+    // Create Zoom meeting
+    const meetingResponse = await axios.post('https://api.zoom.us/v2/users/me/meetings', {
+      topic: 'PeerSync Mentorship Session',
+      type: 1,
+      duration: 10,
+      settings: {
+        host_video: true,
+        participant_video: true,
+        join_before_host: false,
+        mute_upon_entry: true,
+        waiting_room: false,
+        auto_recording: 'none'
+      }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const meeting = meetingResponse.data;
+    
+    const meetingId = meeting.id;
+    const joinUrl = meeting.join_url;
+    const startUrl = meeting.start_url;
+    
+    // Update call status with Zoom meeting details
+    await pool.query(
+      'UPDATE video_calls SET status = $1, accepted_at = $2, zoom_meeting_id = $3, join_url = $4, start_url = $5 WHERE id = $6 AND mentor_id = $7',
+      ['accepted', new Date().toISOString(), meetingId, joinUrl, startUrl, callId, mentorId]
+    );
+    
+    res.json({ 
+      message: 'Call accepted', 
+      meetingId,
+      joinUrl,
+      startUrl
+    });
   } catch (error) {
     console.error('Accept call error:', error);
     res.status(500).json({ error: 'Server error' });

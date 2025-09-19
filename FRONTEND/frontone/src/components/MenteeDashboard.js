@@ -4,7 +4,7 @@ import config from '../config';
 import BlogSection from './BlogSection';
 import NotificationPanel from './NotificationPanel';
 import CommunityBrowser from './CommunityBrowser';
-import VideoCall from './VideoCall';
+import ZoomVideoCall from './ZoomVideoCall';
 import CallRequestModal from './CallRequestModal';
 
 import SessionsPanel from './SessionsPanel';
@@ -397,7 +397,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
 
   if (activeCall) {
     return (
-      <VideoCall 
+      <ZoomVideoCall 
         callId={activeCall.callId}
         user={user}
         onEndCall={handleCallEnd}

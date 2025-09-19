@@ -7,6 +7,8 @@ import CreateBlog from './CreateBlog';
 import NotificationPanel from './NotificationPanel';
 import CommunitySection from './CommunitySection';
 import SessionsPanel from './SessionsPanel';
+import ZoomAuthButton from './ZoomAuthButton';
+import ZoomStatusChecker from './ZoomStatusChecker';
 import './MentorDashboard.css';
 
 const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
@@ -322,6 +324,23 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
         <button onClick={() => setActiveTab('profile')} className="edit-profile-btn">
           Edit Profile
         </button>
+      </div>
+      <div className="settings-section">
+        <h4>🎥 Zoom Integration</h4>
+        <p>Connect your Zoom account to host mentorship video calls</p>
+        <div className="zoom-status">
+          <ZoomStatusChecker user={user} />
+        </div>
+        <ZoomAuthButton 
+          user={user} 
+          onAuthSuccess={() => {
+            alert('Zoom account connected successfully! You can now host video calls.');
+            loadProfileData(); // Refresh to show updated status
+          }}
+        />
+        <div className="zoom-info">
+          <small>ℹ️ Required to accept and host video call sessions with mentees</small>
+        </div>
       </div>
     </div>
   );
