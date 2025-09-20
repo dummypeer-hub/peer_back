@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import CloudflareVideoCall from './CloudflareVideoCall';
+import RobustWebRTCCall from './RobustWebRTCCall';
 
 const MentorCallHandler = ({ user, children }) => {
   const [activeCall, setActiveCall] = useState(null);
@@ -16,7 +16,7 @@ const MentorCallHandler = ({ user, children }) => {
 
   if (activeCall) {
     return (
-      <CloudflareVideoCall 
+      <RobustWebRTCCall 
         callId={activeCall.callId}
         user={user}
         onEndCall={handleCallEnd}

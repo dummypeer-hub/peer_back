@@ -18,9 +18,12 @@ app.set('trust proxy', 1); // Trust Railway proxy
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: true,
-    methods: ['GET', 'POST']
-  }
+    origin: ['https://peerverse-final.vercel.app', 'http://localhost:3000', 'http://localhost:3001'],
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 const PORT = process.env.PORT || 3000;
 
@@ -2100,7 +2103,36 @@ io.on('connection', (socket) => {
     console.log(`[${new Date().toLocaleTimeString()}] User joined call room: call_${callId}`);
   });
   
+  socket.on('leave_call', (callId) => {
+    socket.leave(`call_${callId}`);
+    console.log(`[${new Date().toLocaleTimeString()}] User left call room: call_${callId}`);
+  });
+  
   // WebRTC signaling events
+  socket.on('offer', (data) => {
+    console.log(`📤 Relaying offer for call ${data.callId}`);
+    socket.to(`call_${data.callId}`).emit('offer', data);
+  });
+  
+  socket.on('answer', (data) => {
+    console.log(`📤 Relaying answer for call ${data.callId}`);
+    socket.to(`call_${data.callId}`).emit('answer', data);
+  });
+  
+  socket.on('ice_candidate', (data) => {
+    socket.to(`call_${data.callId}`).emit('ice_candidate', data);
+  });
+  
+  // Chat and timer sync
+  socket.on('chat_message', (data) => {
+    socket.to(`call_${data.callId}`).emit('chat_message', data);
+  });
+  
+  socket.on('timer_sync', (data) => {
+    socket.to(`call_${data.callId}`).emit('timer_sync', data);
+  });
+  
+  // Legacy WebRTC events (for backward compatibility)
   socket.on('webrtc_offer', (data) => {
     socket.to(`call_${data.callId}`).emit('webrtc_offer', data);
   });

@@ -7,7 +7,7 @@ import CreateBlog from './CreateBlog';
 import NotificationPanel from './NotificationPanel';
 import CommunitySection from './CommunitySection';
 import SessionsPanel from './SessionsPanel';
-import CloudflareVideoCall from './CloudflareVideoCall';
+import RobustWebRTCCall from './RobustWebRTCCall';
 
 import './MentorDashboard.css';
 import './LogoStyles.css';
@@ -129,7 +129,7 @@ const MentorDashboard = ({ user, onLogout }) => {
   // Early return after all hooks and functions
   if (activeCall) {
     return (
-      <CloudflareVideoCall 
+      <RobustWebRTCCall 
         callId={activeCall.callId}
         user={user}
         onEndCall={handleEndCall}

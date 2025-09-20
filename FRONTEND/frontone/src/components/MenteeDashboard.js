@@ -4,7 +4,7 @@ import config from '../config';
 import BlogSection from './BlogSection';
 import NotificationPanel from './NotificationPanel';
 import CommunityBrowser from './CommunityBrowser';
-import CloudflareVideoCall from './CloudflareVideoCall';
+import RobustWebRTCCall from './RobustWebRTCCall';
 import CallRequestModal from './CallRequestModal';
 import MenteeProfileEditor from './MenteeProfileEditor';
 
@@ -563,7 +563,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
 
   if (activeCall) {
     return (
-      <CloudflareVideoCall 
+      <RobustWebRTCCall 
         callId={activeCall.callId}
         user={user}
         onEndCall={handleCallEnd}

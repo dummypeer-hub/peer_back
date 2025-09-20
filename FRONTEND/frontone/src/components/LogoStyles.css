@@ -1,7 +1,7 @@
 .dashboard-logo {
   height: 120px;
   width: 100%;
-  max-width: 300px;
+  max-width: 500px;
   object-fit: contain;
   padding: 15px;
 }
@@ -9,7 +9,7 @@
 .header-left .dashboard-logo {
   height: 120px;
   width: auto;
-  max-width: 300px;
+  max-width: 500px;
   object-fit: contain;
   padding: 8px 0;
 }

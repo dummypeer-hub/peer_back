@@ -4,6 +4,120 @@ import { io } from 'socket.io-client';
 import config from '../config';
 import './CloudflareVideoCall.css';
 
+// Singleton Socket Manager for multiple concurrent calls
+class SocketManager {
+  constructor() {
+    this.socket = null;
+    this.callHandlers = new Map();
+    this.isConnecting = false;
+    this.connectionPromise = null;
+  }
+
+  async connect() {
+    if (this.socket && this.socket.connected) {
+      return this.socket;
+    }
+    
+    if (this.isConnecting && this.connectionPromise) {
+      return this.connectionPromise;
+    }
+    
+    this.isConnecting = true;
+    this.connectionPromise = new Promise((resolve, reject) => {
+      try {
+        this.socket = io(config.SOCKET_URL, {
+          transports: ['websocket', 'polling'],
+          timeout: 20000,
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000
+        });
+        
+        this.socket.on('connect', () => {
+          console.log('✅ Socket.IO connected successfully to:', config.SOCKET_URL);
+          this.isConnecting = false;
+          this.setupGlobalHandlers();
+          resolve(this.socket);
+        });
+        
+        this.socket.on('connect_error', (error) => {
+          console.error('❌ Socket.IO connection error:', error);
+          console.error('Trying to connect to:', config.SOCKET_URL);
+          this.isConnecting = false;
+          reject(error);
+        });
+        
+        this.socket.on('disconnect', (reason) => {
+          console.log('🔌 Socket.IO disconnected:', reason);
+        });
+        
+        this.socket.on('reconnect', (attemptNumber) => {
+          console.log('🔄 Socket.IO reconnected after', attemptNumber, 'attempts');
+        });
+        
+        this.socket.on('reconnect_error', (error) => {
+          console.error('🔄❌ Socket.IO reconnection failed:', error);
+        });
+        
+        console.log('🔌 Attempting to connect to Socket.IO:', config.SOCKET_URL);
+        
+      } catch (error) {
+        this.isConnecting = false;
+        reject(error);
+      }
+    });
+    
+    return this.connectionPromise;
+  }
+
+  setupGlobalHandlers() {
+    this.socket.on('webrtc_offer', (data) => {
+      const handler = this.callHandlers.get(data.callId);
+      if (handler && handler.onOffer) {
+        handler.onOffer(data);
+      }
+    });
+
+    this.socket.on('webrtc_answer', (data) => {
+      const handler = this.callHandlers.get(data.callId);
+      if (handler && handler.onAnswer) {
+        handler.onAnswer(data);
+      }
+    });
+
+    this.socket.on('webrtc_ice_candidate', (data) => {
+      const handler = this.callHandlers.get(data.callId);
+      if (handler && handler.onIceCandidate) {
+        handler.onIceCandidate(data);
+      }
+    });
+  }
+
+  registerCall(callId, handlers) {
+    this.callHandlers.set(callId, handlers);
+    this.socket.emit('join_call', callId);
+  }
+
+  unregisterCall(callId) {
+    this.callHandlers.delete(callId);
+    this.socket.emit('leave_call', callId);
+  }
+
+  emit(event, data) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit(event, data);
+    } else {
+      console.warn('Socket not connected, cannot emit:', event);
+    }
+  }
+  
+  isConnected() {
+    return this.socket && this.socket.connected;
+  }
+}
+
+const socketManager = new SocketManager();
+
 const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -157,22 +271,21 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
 
   const handleSignaling = async (pc) => {
     try {
-      // Create single Socket.IO connection
-      const socket = io(config.API_BASE_URL);
+      // Use singleton socket manager with proper await
+      const socket = await socketManager.connect();
       socketRef.current = socket;
       pcRef.current = pc;
       
       console.log(`${user.role} joining call ${callId}`);
       
-      // Join both user room and call room
+      // Join user room
       socket.emit('join_user_room', user.id);
-      socket.emit('join_call', callId);
       
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
-        if (event.candidate) {
+        if (event.candidate && socketManager.isConnected()) {
           console.log('Sending ICE candidate:', event.candidate);
-          socket.emit('webrtc_ice_candidate', {
+          socketManager.emit('webrtc_ice_candidate', {
             callId,
             candidate: event.candidate,
             userId: user.id
@@ -180,50 +293,54 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         }
       };
       
-      // Handle WebRTC signaling via Socket.IO
-      socket.on('webrtc_offer', async (data) => {
-        console.log('Received offer:', data);
-        if (data.callId == callId && user.role === 'mentee') {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            
-            console.log('Sending answer:', answer);
-            socket.emit('webrtc_answer', {
-              callId,
-              answer,
-              userId: user.id
-            });
-          } catch (error) {
-            console.error('Error handling offer:', error);
+      // Register call-specific handlers
+      socketManager.registerCall(callId, {
+        onOffer: async (data) => {
+          console.log('Received offer:', data);
+          if (data.callId == callId && user.role === 'mentee') {
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              
+              console.log('Sending answer:', answer);
+              if (socketManager.isConnected()) {
+                socketManager.emit('webrtc_answer', {
+                  callId,
+                  answer,
+                  userId: user.id
+                });
+              }
+            } catch (error) {
+              console.error('Error handling offer:', error);
+            }
+          }
+        },
+        
+        onAnswer: async (data) => {
+          console.log('Received answer:', data);
+          if (data.callId == callId && user.role === 'mentor') {
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } catch (error) {
+              console.error('Error handling answer:', error);
+            }
+          }
+        },
+        
+        onIceCandidate: async (data) => {
+          console.log('Received ICE candidate:', data);
+          if (data.callId == callId && data.userId !== user.id) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (error) {
+              console.error('Error adding ICE candidate:', error);
+            }
           }
         }
       });
       
-      socket.on('webrtc_answer', async (data) => {
-        console.log('Received answer:', data);
-        if (data.callId == callId && user.role === 'mentor') {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-          } catch (error) {
-            console.error('Error handling answer:', error);
-          }
-        }
-      });
-      
-      socket.on('webrtc_ice_candidate', async (data) => {
-        console.log('Received ICE candidate:', data);
-        if (data.callId == callId && data.userId !== user.id) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-          } catch (error) {
-            console.error('Error adding ICE candidate:', error);
-          }
-        }
-      });
-      
-      // Create offer if mentor (after a small delay to ensure both are connected)
+      // Create offer if mentor (after a small delay)
       if (user.role === 'mentor') {
         setTimeout(async () => {
           try {
@@ -232,11 +349,13 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
             await pc.setLocalDescription(offer);
             
             console.log('Sending offer:', offer);
-            socket.emit('webrtc_offer', {
-              callId,
-              offer,
-              userId: user.id
-            });
+            if (socketManager.isConnected()) {
+              socketManager.emit('webrtc_offer', {
+                callId,
+                offer,
+                userId: user.id
+              });
+            }
           } catch (error) {
             console.error('Error creating offer:', error);
           }
@@ -363,9 +482,8 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     if (pcRef.current) {
       pcRef.current.close();
     }
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
+    // Unregister this call from socket manager
+    socketManager.unregisterCall(callId);
   };
 
   const formatTime = (seconds) => {
