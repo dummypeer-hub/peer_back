@@ -2095,40 +2095,53 @@ io.on('connection', (socket) => {
   
   socket.on('join_user_room', (userId) => {
     socket.join(`user_${userId}`);
-    console.log(`[${new Date().toLocaleTimeString()}] User ${userId} joined room: user_${userId}`);
+    console.log(`[${new Date().toLocaleTimeString()}] 🏠 User ${userId} joined room: user_${userId}`);
   });
   
   socket.on('join_call', (callId) => {
     socket.join(`call_${callId}`);
-    console.log(`[${new Date().toLocaleTimeString()}] User joined call room: call_${callId}`);
+    const roomSize = io.sockets.adapter.rooms.get(`call_${callId}`)?.size || 0;
+    console.log(`[${new Date().toLocaleTimeString()}] 📞 User joined call room: call_${callId} (${roomSize} participants)`);
+    
+    // Notify others in the room
+    socket.to(`call_${callId}`).emit('participant_joined', {
+      callId,
+      participantCount: roomSize
+    });
   });
   
   socket.on('leave_call', (callId) => {
     socket.leave(`call_${callId}`);
-    console.log(`[${new Date().toLocaleTimeString()}] User left call room: call_${callId}`);
+    const roomSize = io.sockets.adapter.rooms.get(`call_${callId}`)?.size || 0;
+    console.log(`[${new Date().toLocaleTimeString()}] 🚪 User left call room: call_${callId} (${roomSize} participants)`);
   });
   
-  // WebRTC signaling events
+  // WebRTC signaling events with detailed logging
   socket.on('offer', (data) => {
-    console.log(`📤 Relaying offer for call ${data.callId}`);
+    const roomSize = io.sockets.adapter.rooms.get(`call_${data.callId}`)?.size || 0;
+    console.log(`📤 Relaying OFFER from ${data.role} (${data.from}) for call ${data.callId} to ${roomSize-1} other participants`);
     socket.to(`call_${data.callId}`).emit('offer', data);
   });
   
   socket.on('answer', (data) => {
-    console.log(`📤 Relaying answer for call ${data.callId}`);
+    const roomSize = io.sockets.adapter.rooms.get(`call_${data.callId}`)?.size || 0;
+    console.log(`📤 Relaying ANSWER from ${data.role} (${data.from}) for call ${data.callId} to ${roomSize-1} other participants`);
     socket.to(`call_${data.callId}`).emit('answer', data);
   });
   
   socket.on('ice_candidate', (data) => {
+    console.log(`🧊 Relaying ICE candidate from ${data.role} (${data.from}) for call ${data.callId}`);
     socket.to(`call_${data.callId}`).emit('ice_candidate', data);
   });
   
-  // Chat and timer sync
+  // Chat and timer sync with logging
   socket.on('chat_message', (data) => {
+    console.log(`💬 Relaying chat message from ${data.role} (${data.from}) for call ${data.callId}`);
     socket.to(`call_${data.callId}`).emit('chat_message', data);
   });
   
   socket.on('timer_sync', (data) => {
+    console.log(`⏱️ Relaying timer sync from ${data.role} (${data.from}) for call ${data.callId}: ${data.timeLeft}s`);
     socket.to(`call_${data.callId}`).emit('timer_sync', data);
   });
   

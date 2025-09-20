@@ -48,11 +48,25 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     try {
       console.log(`🚀 Initializing call ${callId} for ${user.role}`);
       
-      // Get user media
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720 },
-        audio: { echoCancellation: true, noiseSuppression: true }
-      });
+      // Stop any existing streams first
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      
+      // Get user media with fallback constraints
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 1280, height: 720 },
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
+      } catch (error) {
+        console.warn('HD constraints failed, trying basic:', error);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
+      }
       
       setLocalStream(stream);
       if (localVideoRef.current) {
@@ -76,15 +90,31 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         }
       };
 
-      // Connection state monitoring
+      // Connection state monitoring with detailed logging
       pc.onconnectionstatechange = () => {
-        console.log('🔗 Connection state:', pc.connectionState);
+        console.log(`🔗 ${user.role} Connection state changed:`, pc.connectionState);
         setConnectionState(pc.connectionState);
-        setIsConnected(pc.connectionState === 'connected');
+        
+        if (pc.connectionState === 'connected') {
+          console.log(`✅ 🎉 ${user.role.toUpperCase()} SUCCESSFULLY CONNECTED!`);
+          setIsConnected(true);
+        } else if (pc.connectionState === 'failed') {
+          console.error(`❌ ${user.role} WebRTC connection FAILED`);
+          setIsConnected(false);
+        } else if (pc.connectionState === 'disconnected') {
+          console.log(`🔌 ${user.role} WebRTC disconnected`);
+          setIsConnected(false);
+        }
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log('🧊 ICE state:', pc.iceConnectionState);
+        console.log(`🧊 ${user.role} ICE connection state:`, pc.iceConnectionState);
+        
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          console.log(`✅ ${user.role} ICE connection established!`);
+        } else if (pc.iceConnectionState === 'failed') {
+          console.error(`❌ ${user.role} ICE connection failed!`);
+        }
       };
 
       // Setup Socket.IO
@@ -95,93 +125,194 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
 
     } catch (error) {
       console.error('❌ Failed to initialize call:', error);
-      alert('Failed to access camera/microphone. Please check permissions.');
+      if (error.name === 'NotReadableError') {
+        alert('Camera/microphone is being used by another application. Please close other video apps and try again.');
+      } else {
+        alert('Failed to access camera/microphone. Please check permissions and try again.');
+      }
     }
   };
 
   const setupSocket = async (pc) => {
     return new Promise((resolve, reject) => {
       const socket = io(config.SOCKET_URL, {
-        transports: ['websocket', 'polling'],
-        timeout: 10000,
-        forceNew: true
+        transports: ['polling', 'websocket'],
+        timeout: 15000,
+        forceNew: true,
+        reconnection: false
       });
 
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        console.log('✅ Socket connected');
-        socket.emit('join_user_room', user.id);
-        socket.emit('join_call', callId);
-        setupSignaling(pc, socket);
-        resolve();
+        console.log(`✅ ${user.role} socket connected for call ${callId}`);
+        
+        // Join rooms with delay to ensure server processing
+        setTimeout(() => {
+          socket.emit('join_user_room', user.id);
+          socket.emit('join_call', callId);
+          console.log(`🏠 ${user.role} joined rooms: user_${user.id}, call_${callId}`);
+          setupSignaling(pc, socket);
+          resolve();
+        }, 500);
       });
 
       socket.on('connect_error', (error) => {
         console.error('❌ Socket connection failed:', error);
         reject(error);
       });
+      
+      socket.on('disconnect', (reason) => {
+        console.log(`🔌 ${user.role} socket disconnected:`, reason);
+      });
     });
   };
 
   const setupSignaling = (pc, socket) => {
-    // ICE candidates
+    console.log(`🔌 Setting up signaling for ${user.role} in call ${callId}`);
+    
+    // ICE candidates with detailed logging
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`🧊 ${user.role} sending ICE candidate:`, event.candidate.type);
         socket.emit('ice_candidate', {
           callId,
           candidate: event.candidate,
-          from: user.id
+          from: user.id,
+          role: user.role
         });
+      } else {
+        console.log(`🧊 ${user.role} ICE gathering complete`);
       }
     };
 
-    // Handle signaling events
+    // Detailed connection state logging
+    pc.oniceconnectionstatechange = () => {
+      console.log(`🧊 ${user.role} ICE connection state: ${pc.iceConnectionState}`);
+    };
+    
+    pc.onicegatheringstatechange = () => {
+      console.log(`🧊 ${user.role} ICE gathering state: ${pc.iceGatheringState}`);
+    };
+    
+    pc.onsignalingstatechange = () => {
+      console.log(`📡 ${user.role} signaling state: ${pc.signalingState}`);
+    };
+
+    // Participant tracking
+    socket.on('participant_joined', (data) => {
+      console.log(`👥 Participant joined call ${data.callId}, total: ${data.participantCount}`);
+      if (data.participantCount >= 2 && user.role === 'mentor') {
+        console.log('📤 Both participants ready, mentor will create offer in 3 seconds...');
+      }
+    });
+
+    // Handle signaling events with detailed logging
     socket.on('offer', async (data) => {
-      if (data.callId == callId && data.from !== user.id) {
-        console.log('📨 Received offer');
-        await pc.setRemoteDescription(data.offer);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('answer', { callId, answer, from: user.id });
+      console.log(`📨 ${user.role} received offer from user ${data.from} for call ${data.callId}`);
+      console.log('Offer details:', { callId: data.callId, from: data.from, myId: user.id, myRole: user.role });
+      
+      if (data.callId == callId && data.from !== user.id && user.role === 'mentee') {
+        console.log('📨 ✅ Mentee processing offer...');
+        try {
+          console.log('📨 Setting remote description...');
+          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          console.log('📨 Creating answer...');
+          const answer = await pc.createAnswer();
+          console.log('📨 Setting local description...');
+          await pc.setLocalDescription(answer);
+          console.log('📤 Sending answer...');
+          socket.emit('answer', { callId, answer, from: user.id, role: user.role });
+          console.log('✅ Answer sent successfully');
+        } catch (error) {
+          console.error('❌ Error handling offer:', error);
+        }
+      } else {
+        console.log('📨 ❌ Ignoring offer - not for this mentee or wrong role');
       }
     });
 
     socket.on('answer', async (data) => {
-      if (data.callId == callId && data.from !== user.id) {
-        console.log('📨 Received answer');
-        await pc.setRemoteDescription(data.answer);
+      console.log(`📨 ${user.role} received answer from user ${data.from} for call ${data.callId}`);
+      console.log('Answer details:', { callId: data.callId, from: data.from, myId: user.id, myRole: user.role });
+      
+      if (data.callId == callId && data.from !== user.id && user.role === 'mentor') {
+        console.log('📨 ✅ Mentor processing answer...');
+        try {
+          console.log('📨 Setting remote description from answer...');
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          console.log('✅ Answer processed successfully - WebRTC connection should establish');
+        } catch (error) {
+          console.error('❌ Error handling answer:', error);
+        }
+      } else {
+        console.log('📨 ❌ Ignoring answer - not for this mentor or wrong role');
       }
     });
 
     socket.on('ice_candidate', async (data) => {
+      console.log(`🧊 ${user.role} received ICE candidate from ${data.role} (user ${data.from})`);
       if (data.callId == callId && data.from !== user.id) {
-        await pc.addIceCandidate(data.candidate);
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log(`✅ ICE candidate added successfully`);
+        } catch (error) {
+          console.error('❌ ICE candidate error:', error);
+        }
       }
     });
 
-    // Chat messages
+    // Chat messages with logging
     socket.on('chat_message', (data) => {
       if (data.callId == callId && data.from !== user.id) {
+        console.log('💬 Received chat message from:', data.from);
         setMessages(prev => [...prev, data.message]);
       }
     });
 
     // Timer sync
     socket.on('timer_sync', (data) => {
-      if (data.callId == callId) {
+      if (data.callId == callId && data.from !== user.id) {
+        console.log('⏱️ Timer sync received:', data.timeLeft);
         setTimeLeft(data.timeLeft);
       }
     });
 
-    // Start signaling if mentor
+    // Start signaling if mentor (wait for both to join)
     if (user.role === 'mentor') {
+      console.log('📤 Mentor will create offer in 3 seconds...');
       setTimeout(async () => {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', { callId, offer, from: user.id });
-        console.log('📤 Sent offer');
-      }, 1000);
+        try {
+          console.log('📤 🚀 MENTOR CREATING OFFER NOW...');
+          console.log('PC signaling state before offer:', pc.signalingState);
+          console.log('PC connection state before offer:', pc.connectionState);
+          
+          const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true
+          });
+          
+          console.log('📤 Offer created, setting local description...');
+          await pc.setLocalDescription(offer);
+          
+          console.log('📤 Local description set, sending offer...');
+          console.log('Offer SDP preview:', offer.sdp.substring(0, 100) + '...');
+          
+          socket.emit('offer', { 
+            callId, 
+            offer, 
+            from: user.id, 
+            role: user.role,
+            timestamp: Date.now()
+          });
+          
+          console.log('✅ 📤 OFFER SENT SUCCESSFULLY TO MENTEE!');
+        } catch (error) {
+          console.error('❌ 📤 FAILED TO CREATE/SEND OFFER:', error);
+        }
+      }, 3000);
+    } else {
+      console.log('📨 Mentee waiting for offer from mentor...');
     }
   };
 
@@ -300,18 +431,46 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         from: user.id
       };
 
-      // Send via data channel if available
+      console.log(`💬 ${user.role} sending message:`, message.text);
+      
+      let sentViaDataChannel = false;
+      let sentViaSocket = false;
+
+      // Try data channel first
       if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
-        dataChannelRef.current.send(JSON.stringify(message));
+        try {
+          dataChannelRef.current.send(JSON.stringify(message));
+          console.log('✅ Message sent via data channel');
+          sentViaDataChannel = true;
+        } catch (error) {
+          console.error('❌ Data channel send failed:', error);
+        }
+      } else {
+        console.log('❌ Data channel not available, state:', dataChannelRef.current?.readyState);
       }
 
-      // Also send via socket as backup
-      if (socketRef.current) {
-        socketRef.current.emit('chat_message', {
-          callId,
-          message,
-          from: user.id
-        });
+      // Send via socket (always as backup)
+      if (socketRef.current && socketRef.current.connected) {
+        try {
+          socketRef.current.emit('chat_message', {
+            callId,
+            message,
+            from: user.id,
+            role: user.role
+          });
+          console.log('✅ Message sent via socket');
+          sentViaSocket = true;
+        } catch (error) {
+          console.error('❌ Socket send failed:', error);
+        }
+      } else {
+        console.log('❌ Socket not connected');
+      }
+      
+      if (!sentViaDataChannel && !sentViaSocket) {
+        console.error('❌ Message failed to send via both channels!');
+        alert('Message failed to send. Connection issue.');
+        return;
       }
 
       setMessages(prev => [...prev, message]);
