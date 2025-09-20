@@ -32,6 +32,7 @@ const MentorDashboard = ({ user, onLogout }) => {
   const [showCreateBlog, setShowCreateBlog] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
+  // All function definitions before useEffect
   const handleJoinSession = (callId) => {
     setActiveCall({ callId });
   };
@@ -39,43 +40,6 @@ const MentorDashboard = ({ user, onLogout }) => {
   const handleEndCall = () => {
     setActiveCall(null);
   };
-  
-  // Early return after all hooks
-  if (activeCall) {
-    return (
-      <CloudflareVideoCall 
-        callId={activeCall.callId}
-        user={user}
-        onEndCall={handleEndCall}
-      />
-    );
-  }
-
-  const handleProfileSave = (profileData) => {
-    setShowProfileEditor(false);
-    // Update profile completion and picture
-    if (profileData.basicInfo?.profilePicture) {
-      setProfilePicture(profileData.basicInfo.profilePicture);
-    }
-    loadStats(); // Refresh stats including profile completion
-    loadProfileData(); // Refresh profile data
-  };
-  
-  useEffect(() => {
-    if (user?.id) {
-      loadProfileData();
-      loadNotifications();
-      loadStats();
-      loadUpcomingSessions();
-      
-      const interval = setInterval(() => {
-        loadNotifications();
-        loadStats();
-      }, 30000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [user]);
 
   const loadStats = async () => {
     try {
@@ -113,7 +77,6 @@ const MentorDashboard = ({ user, onLogout }) => {
       });
       
       const notifs = response.data.notifications || [];
-      console.log('Loaded notifications for mentor:', notifs);
       setNotifications(notifs);
       setUnreadCount(notifs.filter(n => !n.is_read).length);
     } catch (error) {
@@ -137,63 +100,42 @@ const MentorDashboard = ({ user, onLogout }) => {
     }
   };
 
-  const calculateProfileCompletion = (profile) => {
-    let completed = 0;
-    let total = 0;
-    
-    // Basic Info (3 fields)
-    if (profile.basicInfo) {
-      if (profile.basicInfo.name) completed++;
-      if (profile.basicInfo.profilePicture) {
-        completed++;
-        setProfilePicture(profile.basicInfo.profilePicture);
-      }
-      if (profile.basicInfo.bio) completed++;
-      total += 3;
+  const handleProfileSave = (profileData) => {
+    setShowProfileEditor(false);
+    if (profileData.basicInfo?.profilePicture) {
+      setProfilePicture(profileData.basicInfo.profilePicture);
     }
-    
-    // Education (at least 1 entry with degree and institution)
-    if (profile.education && profile.education.length > 0) {
-      const validEducation = profile.education.filter(edu => edu.degree && edu.institution);
-      if (validEducation.length > 0) completed++;
-    }
-    total += 1;
-    
-    // Skills (at least 3 skills)
-    if (profile.skills && profile.skills.length >= 3) {
-      const validSkills = profile.skills.filter(skill => skill.name && skill.experience);
-      if (validSkills.length >= 3) completed++;
-    }
-    total += 1;
-    
-    // Background (at least 1 job)
-    if (profile.background && profile.background.length > 0) {
-      const validJobs = profile.background.filter(job => job.company && job.position);
-      if (validJobs.length > 0) completed++;
-    }
-    total += 1;
-    
-    // Interests (at least 5 interests)
-    if (profile.interests && Array.isArray(profile.interests) && profile.interests.length >= 5) {
-      completed++;
-    }
-    total += 1;
-    
-    // Languages (at least 2 languages)
-    if (profile.languages && profile.languages.length >= 2) {
-      const validLanguages = profile.languages.filter(lang => lang.name && lang.proficiency);
-      if (validLanguages.length >= 2) completed++;
-    }
-    total += 1;
-    
-    // Availability
-    if (profile.availability && profile.availability.timezone && profile.availability.preferredHours) {
-      completed++;
-    }
-    total += 1;
-    
-    setProfileCompletion(Math.round((completed / total) * 100));
+    loadStats();
+    loadProfileData();
   };
+
+  // useEffect after all function definitions
+  useEffect(() => {
+    if (user?.id) {
+      loadProfileData();
+      loadNotifications();
+      loadStats();
+      loadUpcomingSessions();
+      
+      const interval = setInterval(() => {
+        loadNotifications();
+        loadStats();
+      }, 30000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+  
+  // Early return after all hooks and functions
+  if (activeCall) {
+    return (
+      <CloudflareVideoCall 
+        callId={activeCall.callId}
+        user={user}
+        onEndCall={handleEndCall}
+      />
+    );
+  }
 
   const renderHome = () => (
     <div className="home-content">
@@ -218,6 +160,10 @@ const MentorDashboard = ({ user, onLogout }) => {
           <span className="stat-number">{stats.totalSessions}</span>
         </div>
         <div className="stat-card">
+          <h4>Completed Sessions</h4>
+          <span className="stat-number">{stats.completedSessions}</span>
+        </div>
+        <div className="stat-card">
           <h4>Total Blogs</h4>
           <span className="stat-number">{stats.totalBlogs}</span>
         </div>
@@ -233,18 +179,22 @@ const MentorDashboard = ({ user, onLogout }) => {
           upcomingSessions.map(session => (
             <div key={session.id} className="session-card">
               <div className="session-info">
-                <h4>{session.mentee}</h4>
-                <p>{session.date} at {session.time}</p>
-                <p>{session.topic}</p>
+                <h4>{session.mentee_name}</h4>
+                <p>{new Date(session.created_at).toLocaleDateString()} at {new Date(session.created_at).toLocaleTimeString()}</p>
+                <p>Video Call Request</p>
               </div>
               <div className="session-actions">
-                <button className="start-btn">Start Session</button>
-                <button className="complete-btn">Mark Completed</button>
+                <button 
+                  className="start-btn"
+                  onClick={() => setActiveTab('sessions')}
+                >
+                  View Request
+                </button>
               </div>
             </div>
           ))
         ) : (
-          <p>No upcoming sessions</p>
+          <p>No pending session requests</p>
         )}
       </div>
 
@@ -333,7 +283,6 @@ const MentorDashboard = ({ user, onLogout }) => {
               });
               setNotifications([]);
               setUnreadCount(0);
-              // Clear cache
               localStorage.removeItem(`notifications_${user.id}`);
               localStorage.removeItem(`notifications_${user.id}_time`);
             } catch (error) {
