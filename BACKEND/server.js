@@ -689,9 +689,33 @@ app.get('/api/mentors', async (req, res) => {
       } catch (e) { interests = []; }
       
       let interestsByCategory = {};
+      let selectedCategories = [];
       try {
         const interestsData = mentor.interests ? (typeof mentor.interests === 'string' ? JSON.parse(mentor.interests) : mentor.interests) : {};
-        interestsByCategory = interestsData.interestsByCategory || {};
+        
+        if (interestsData.interestsByCategory) {
+          interestsByCategory = interestsData.interestsByCategory;
+        } else if (interestsData.selectedCategories && Array.isArray(interestsData.interests)) {
+          // Group flat interests by categories
+          selectedCategories = interestsData.selectedCategories;
+          const interestTags = {
+            placement: ['DSA', 'Frontend Development', 'Backend Development', 'Full Stack', 'Mobile Development', 'DevOps', 'Cloud Computing', 'Machine Learning', 'Data Science', 'Cybersecurity', 'System Design', 'Database Management', 'API Development', 'Testing', 'UI/UX Design', 'Product Management', 'Aptitude', 'Resume Building', 'Interview Preparation', 'Coding Practice'],
+            college_reviews: ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Mumbai'],
+            skills_learning: ['JavaScript', 'Python', 'Java', 'C++', 'React', 'Angular', 'Vue.js', 'Node.js', 'Spring Boot', 'Django', 'Flask', 'MongoDB', 'MySQL', 'PostgreSQL', 'AWS', 'Azure', 'Docker', 'Kubernetes', 'Git', 'Linux'],
+            projects: ['Web Development', 'Mobile Apps', 'Desktop Applications', 'Game Development', 'AI/ML Projects', 'Data Analytics', 'Blockchain', 'IoT', 'AR/VR', 'E-commerce', 'Social Media', 'Healthcare', 'Education', 'Finance', 'Entertainment', 'Open Source', 'Startup Ideas', 'Research Projects', 'Hackathon Projects', 'Portfolio Projects'],
+            hackathons: ['Problem Solving', 'Team Formation', 'Idea Generation', 'Prototype Development', 'Presentation Skills', 'Time Management', 'Technology Selection', 'UI/UX Design', 'Backend Development', 'Frontend Development', 'Database Design', 'API Integration', 'Deployment', 'Testing', 'Documentation', 'Pitch Preparation', 'Demo Creation', 'Judging Criteria', 'Networking', 'Post-Hackathon Steps'],
+            study_help: ['Mathematics', 'Physics', 'Chemistry', 'Computer Science', 'Electronics', 'Mechanical', 'Civil Engineering', 'Electrical Engineering', 'GATE Preparation', 'JEE Preparation', 'NEET Preparation', 'CAT Preparation', 'GRE Preparation', 'TOEFL Preparation', 'IELTS Preparation', 'Semester Exams', 'Assignment Help', 'Project Reports', 'Research Papers', 'Thesis Writing']
+          };
+          
+          selectedCategories.forEach(category => {
+            const categoryTags = interestsData.interests.filter(interest => 
+              interestTags[category] && interestTags[category].includes(interest)
+            );
+            if (categoryTags.length > 0) {
+              interestsByCategory[category] = categoryTags;
+            }
+          });
+        }
       } catch (e) { interestsByCategory = {}; }
       
       let education = [];
@@ -720,6 +744,7 @@ app.get('/api/mentors', async (req, res) => {
         skills,
         interests,
         interestsByCategory,
+        selectedCategories,
         education,
         background,
         languages,
@@ -1693,10 +1718,34 @@ app.get('/api/mentor/stats/:mentorId', async (req, res) => {
       if (profile.name) completed++;
       if (profile.bio) completed++;
       if (profile.profile_picture) completed++;
-      if (profile.education && JSON.parse(profile.education || '[]').length > 0) completed++;
-      if (profile.skills && JSON.parse(profile.skills || '[]').length > 0) completed++;
-      if (profile.background && JSON.parse(profile.background || '[]').length > 0) completed++;
-      if (profile.interests && JSON.parse(profile.interests || '[]').length > 0) completed++;
+      
+      try {
+        if (profile.education) {
+          const education = typeof profile.education === 'string' ? JSON.parse(profile.education) : profile.education;
+          if (Array.isArray(education) && education.length > 0) completed++;
+        }
+      } catch (e) { /* ignore */ }
+      
+      try {
+        if (profile.skills) {
+          const skills = typeof profile.skills === 'string' ? JSON.parse(profile.skills) : profile.skills;
+          if (Array.isArray(skills) && skills.length > 0) completed++;
+        }
+      } catch (e) { /* ignore */ }
+      
+      try {
+        if (profile.background) {
+          const background = typeof profile.background === 'string' ? JSON.parse(profile.background) : profile.background;
+          if (Array.isArray(background) && background.length > 0) completed++;
+        }
+      } catch (e) { /* ignore */ }
+      
+      try {
+        if (profile.interests) {
+          const interests = typeof profile.interests === 'string' ? JSON.parse(profile.interests) : profile.interests;
+          if ((Array.isArray(interests) && interests.length > 0) || (interests && Object.keys(interests).length > 0)) completed++;
+        }
+      } catch (e) { /* ignore */ }
       
       profileCompletion = Math.round((completed / total) * 100);
     }

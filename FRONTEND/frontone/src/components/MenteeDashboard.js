@@ -103,26 +103,72 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const handleSearch = () => {
     let filtered = mentors;
     
-    // Text search
+    // Comprehensive text search
     if (searchQuery) {
-      filtered = filtered.filter(mentor => 
-        mentor.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        mentor.bio?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        mentor.skills?.some(skill => {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(mentor => {
+        // Search in name
+        if (mentor.name?.toLowerCase().includes(query)) return true;
+        
+        // Search in bio
+        if (mentor.bio?.toLowerCase().includes(query)) return true;
+        
+        // Search in skills
+        if (mentor.skills?.some(skill => {
           const skillName = typeof skill === 'object' ? skill.name : skill;
-          return skillName?.toLowerCase().includes(searchQuery.toLowerCase());
-        })
-      );
+          return skillName?.toLowerCase().includes(query);
+        })) return true;
+        
+        // Search in education (degree, field, institution)
+        if (mentor.education?.some(edu => {
+          return edu.degree?.toLowerCase().includes(query) ||
+                 edu.field?.toLowerCase().includes(query) ||
+                 edu.institution?.toLowerCase().includes(query) ||
+                 edu.school?.toLowerCase().includes(query);
+        })) return true;
+        
+        // Search in background (company, position, description)
+        if (mentor.background?.some(bg => {
+          return bg.company?.toLowerCase().includes(query) ||
+                 bg.organization?.toLowerCase().includes(query) ||
+                 bg.position?.toLowerCase().includes(query) ||
+                 bg.title?.toLowerCase().includes(query) ||
+                 bg.description?.toLowerCase().includes(query) ||
+                 bg.location?.toLowerCase().includes(query);
+        })) return true;
+        
+        // Search in languages
+        if (mentor.languages?.some(lang => {
+          const langName = typeof lang === 'object' ? lang.name : lang;
+          return langName?.toLowerCase().includes(query);
+        })) return true;
+        
+        // Search in interests (both flat array and categorized)
+        if (mentor.interests?.some(interest => {
+          const interestName = typeof interest === 'object' ? interest.name : interest;
+          return interestName?.toLowerCase().includes(query);
+        })) return true;
+        
+        // Search in categorized interests
+        if (mentor.interestsByCategory) {
+          for (const [category, tags] of Object.entries(mentor.interestsByCategory)) {
+            if (category.toLowerCase().includes(query)) return true;
+            if (tags?.some(tag => tag?.toLowerCase().includes(query))) return true;
+          }
+        }
+        
+        return false;
+      });
     }
     
+    // Apply filters
     // College filter
     if (selectedFilters.college) {
       filtered = filtered.filter(mentor => {
-        if (mentor.education && mentor.education.length > 0) {
-          const college = mentor.education[0].institution || mentor.education[0].school;
+        return mentor.education?.some(edu => {
+          const college = edu.institution || edu.school;
           return college?.trim() === selectedFilters.college;
-        }
-        return false;
+        });
       });
     }
     
@@ -131,7 +177,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       filtered = filtered.filter(mentor => 
         mentor.skills?.some(skill => {
           const skillName = typeof skill === 'object' ? skill.name : skill;
-          return skillName?.toLowerCase().trim() === selectedFilters.skill;
+          return skillName?.trim() === selectedFilters.skill;
         })
       );
     }
@@ -141,16 +187,25 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       filtered = filtered.filter(mentor => 
         mentor.languages?.some(language => {
           const langName = typeof language === 'object' ? language.name : language;
-          return langName?.toLowerCase().trim() === selectedFilters.language;
+          return langName?.trim() === selectedFilters.language;
         })
       );
     }
     
-    // Interest filter
+    // Interest filter (works with both flat and categorized interests)
     if (selectedFilters.interest) {
       filtered = filtered.filter(mentor => {
-        if (Array.isArray(mentor.interests)) {
-          return mentor.interests.includes(selectedFilters.interest);
+        // Check flat interests array
+        if (Array.isArray(mentor.interests) && mentor.interests.includes(selectedFilters.interest)) {
+          return true;
+        }
+        // Check categorized interests
+        if (mentor.interestsByCategory) {
+          for (const tags of Object.values(mentor.interestsByCategory)) {
+            if (Array.isArray(tags) && tags.includes(selectedFilters.interest)) {
+              return true;
+            }
+          }
         }
         return false;
       });
@@ -267,38 +322,56 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     const skills = new Set();
     const languages = new Set();
     const companies = new Set();
+    const interests = new Set();
 
     mentors.forEach(mentor => {
-      // Extract college from education (original names)
-      if (mentor.education && mentor.education.length > 0) {
-        const college = mentor.education[0].institution || mentor.education[0].school;
-        if (college) colleges.add(college.trim());
-      }
+      // Extract colleges from all education entries
+      mentor.education?.forEach(edu => {
+        const college = edu.institution || edu.school;
+        if (college && college.trim()) colleges.add(college.trim());
+      });
       
-      // Extract skills (original names)
+      // Extract all skills
       mentor.skills?.forEach(skill => {
         const skillName = typeof skill === 'object' ? skill.name : skill;
-        if (skillName) skills.add(skillName.trim());
+        if (skillName && skillName.trim()) skills.add(skillName.trim());
       });
       
-      // Extract languages (original names)
+      // Extract all languages
       mentor.languages?.forEach(language => {
         const langName = typeof language === 'object' ? language.name : language;
-        if (langName) languages.add(langName.trim());
+        if (langName && langName.trim()) languages.add(langName.trim());
       });
       
-      // Extract companies from background (original names)
+      // Extract companies from all background entries
       mentor.background?.forEach(bg => {
         const company = bg.company || bg.organization;
-        if (company) companies.add(company.trim());
+        if (company && company.trim()) companies.add(company.trim());
       });
+      
+      // Extract interests from both flat array and categorized
+      if (Array.isArray(mentor.interests)) {
+        mentor.interests.forEach(interest => {
+          if (interest && interest.trim()) interests.add(interest.trim());
+        });
+      }
+      
+      if (mentor.interestsByCategory) {
+        Object.values(mentor.interestsByCategory).forEach(tags => {
+          if (Array.isArray(tags)) {
+            tags.forEach(tag => {
+              if (tag && tag.trim()) interests.add(tag.trim());
+            });
+          }
+        });
+      }
     });
 
     setFilters({
       colleges: Array.from(colleges).sort(),
       skills: Array.from(skills).sort(),
       languages: Array.from(languages).sort(),
-      interests: mainInterests,
+      interests: Array.from(interests).sort(),
       companies: Array.from(companies).sort()
     });
   };
@@ -435,19 +508,24 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           <h4>Interests:</h4>
           <div className="interests-list">
             {mentor.interestsByCategory && Object.keys(mentor.interestsByCategory).length > 0 ? (
-              Object.entries(mentor.interestsByCategory).slice(0, 2).map(([category, tags]) => (
-                tags && tags.length > 0 && (
-                  <div key={category} className="interest-category">
-                    <span className="category-name">{category.replace('_', ' ').toUpperCase()}</span>
-                    <div className="category-tags-inline">
-                      {tags.slice(0, 3).map((tag, index) => (
-                        <span key={index} className="interest-tag-small">{tag}</span>
-                      ))}
-                      {tags.length > 3 && <span className="more-tags">+{tags.length - 3}</span>}
+              <div className="interests-by-category-card">
+                {Object.entries(mentor.interestsByCategory).slice(0, 2).map(([category, tags]) => (
+                  tags && tags.length > 0 && (
+                    <div key={category} className="interest-category-card">
+                      <div className="category-name-card">{category.replace('_', ' ').toUpperCase()}</div>
+                      <div className="category-tags-card">
+                        {tags.slice(0, 2).map((tag, index) => (
+                          <span key={index} className="interest-tag-card">{tag}</span>
+                        ))}
+                        {tags.length > 2 && <span className="more-tags-card">+{tags.length - 2}</span>}
+                      </div>
                     </div>
-                  </div>
-                )
-              ))
+                  )
+                ))}
+                {Object.keys(mentor.interestsByCategory).length > 2 && (
+                  <div className="more-categories">+{Object.keys(mentor.interestsByCategory).length - 2} more categories</div>
+                )}
+              </div>
             ) : Array.isArray(mentor.interests) && mentor.interests.length > 0 ? (
               mentor.interests.slice(0, 3).map((interest, index) => (
                 <span key={index} className="category-tag">{interest}</span>
@@ -497,7 +575,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       {/* Header */}
       <header className="dashboard-header">
         <div className="header-left">
-          <img src="/final_logooooo_peerverse.png" alt="PeerVerse" className="dashboard-logo" />
+          <img src="/finall_logo_verse.png" alt="PeerVerse" className="dashboard-logo" />
           <nav className="main-nav">
             <button 
               className={`nav-link ${currentSection === 'home' ? 'active' : ''}`}
@@ -586,9 +664,16 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
               <div className="search-bar">
                 <input
                   type="text"
-                  placeholder="Search mentors by name, skills, interests..."
+                  placeholder="Search by name, education, skills, background, languages, interests..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    // Real-time search with debounce
+                    clearTimeout(window.searchTimeout);
+                    window.searchTimeout = setTimeout(() => {
+                      handleSearch();
+                    }, 300);
+                  }}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 />
                 <button onClick={handleSearch} className="search-btn">
@@ -637,7 +722,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 setSelectedInterest('');
                 setSearchQuery('');
                 setShowInterestBrowser(false);
-                setTimeout(handleSearch, 100);
+                setFilteredMentors(mentors);
               }}>
                 🔍 All Mentors
               </button>
@@ -662,13 +747,14 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
               }}>
                 🧮 DSA
               </button>
-              {selectedInterest && (
+              {(selectedInterest || searchQuery) && (
                 <button className="quick-action-btn clear-btn" onClick={() => {
                   setSelectedInterest('');
+                  setSearchQuery('');
                   setShowInterestBrowser(false);
-                  setTimeout(handleSearch, 100);
+                  setFilteredMentors(mentors);
                 }}>
-                  ❌ Clear: {selectedInterest}
+                  ❌ Clear {selectedInterest ? `Filter: ${selectedInterest}` : `Search: ${searchQuery}`}
                 </button>
               )}
             </div>
@@ -678,9 +764,16 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           <div className="mentors-section">
             <div className="section-header">
               <h2>Available Mentors</h2>
-              <span className="results-count">
-                {filteredMentors.length} mentors found
-              </span>
+              <div className="search-results-info">
+                <span className="results-count">
+                  {filteredMentors.length} mentors found
+                </span>
+                {searchQuery && (
+                  <span className="search-query">
+                    for "{searchQuery}"
+                  </span>
+                )}
+              </div>
             </div>
             
             {loading ? (
@@ -810,9 +903,21 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           <div className="mentors-section">
             <div className="section-header">
               <h2>All Mentors</h2>
-              <span className="results-count">
-                {filteredMentors.length} mentors found
-              </span>
+              <div className="filter-results-info">
+                <span className="results-count">
+                  {filteredMentors.length} mentors found
+                </span>
+                {(selectedFilters.college || selectedFilters.skill || selectedFilters.language || selectedFilters.interest || selectedFilters.company) && (
+                  <div className="active-filters">
+                    <span>Filters: </span>
+                    {selectedFilters.college && <span className="filter-tag">College: {selectedFilters.college}</span>}
+                    {selectedFilters.skill && <span className="filter-tag">Skill: {selectedFilters.skill}</span>}
+                    {selectedFilters.language && <span className="filter-tag">Language: {selectedFilters.language}</span>}
+                    {selectedFilters.interest && <span className="filter-tag">Interest: {selectedFilters.interest}</span>}
+                    {selectedFilters.company && <span className="filter-tag">Company: {selectedFilters.company}</span>}
+                  </div>
+                )}
+              </div>
             </div>
             
             {loading ? (

@@ -32,8 +32,12 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
 
   const handleProfileSave = (profileData) => {
     setShowProfileEditor(false);
-    // Update profile completion based on filled fields
-    calculateProfileCompletion(profileData);
+    // Update profile completion and picture
+    if (profileData.basicInfo?.profilePicture) {
+      setProfilePicture(profileData.basicInfo.profilePicture);
+    }
+    loadStats(); // Refresh stats including profile completion
+    loadProfileData(); // Refresh profile data
   };
   
   useEffect(() => {
@@ -103,7 +107,9 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.profile) {
-        calculateProfileCompletion(response.data.profile);
+        if (response.data.profile.basicInfo?.profilePicture) {
+          setProfilePicture(response.data.profile.basicInfo.profilePicture);
+        }
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -382,7 +388,10 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
       <MentorProfileEditor
         user={user}
         onClose={() => setActiveTab('home')}
-        onSave={handleProfileSave}
+        onSave={(profileData) => {
+          handleProfileSave(profileData);
+          setActiveTab('home');
+        }}
         embedded={true}
       />
     </div>
@@ -406,7 +415,7 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
     <div className="mentor-dashboard">
       <div className="sidebar">
         <div className="sidebar-header">
-          <img src="/final_logooooo_peerverse.png" alt="PeerVerse" className="dashboard-logo" />
+          <img src="/finall_logo_verse.png" alt="PeerVerse" className="dashboard-logo" />
         </div>
         
         <div className="mentor-profile-section">
