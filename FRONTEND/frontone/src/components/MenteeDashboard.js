@@ -222,12 +222,6 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     'STUDY HELP'
   ];
 
-
-  const mainInterests = [
-    'PLACEMENT', 'COLLEGE REVIEWS', 'SKILLS LEARNING', 
-    'PROJECTS', 'HACKATHONS', 'STUDY HELP'
-  ];
-
   useEffect(() => {
     if (user?.id) {
       loadFavorites();
