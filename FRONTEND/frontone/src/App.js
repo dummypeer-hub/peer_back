@@ -10,7 +10,7 @@ import MentorDashboard from './components/MentorDashboard';
 import MenteeDashboard from './components/MenteeDashboard';
 import MentorCallHandler from './components/MentorCallHandler';
 import VideoCallPage from './components/VideoCallPage';
-import ZoomCallbackHandler from './components/ZoomCallbackHandler';
+
 import './App.css';
 
 function App() {
@@ -130,7 +130,7 @@ function App() {
       <div className="App">
         <Routes>
           <Route path="/video-call/:callId" element={<VideoCallPage />} />
-          <Route path="/zoom/callback" element={<ZoomCallbackHandler />} />
+
           <Route path="/*" element={renderCurrentView()} />
         </Routes>
       </div>
