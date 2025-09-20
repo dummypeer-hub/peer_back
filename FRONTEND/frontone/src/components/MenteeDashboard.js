@@ -6,9 +6,11 @@ import NotificationPanel from './NotificationPanel';
 import CommunityBrowser from './CommunityBrowser';
 import ZoomVideoCall from './ZoomVideoCall';
 import CallRequestModal from './CallRequestModal';
+import MenteeProfileEditor from './MenteeProfileEditor';
 
 import SessionsPanel from './SessionsPanel';
 import './MenteeDashboard.css';
+import './InterestStyles.css';
 
 const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -166,6 +168,8 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   });
   const [activeCall, setActiveCall] = useState(null);
   const [showCallModal, setShowCallModal] = useState(false);
+  const [showProfileEditor, setShowProfileEditor] = useState(false);
+  const [menteeProfile, setMenteeProfile] = useState(null);
 
 
   const mainInterests = [
@@ -177,8 +181,21 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     if (user?.id) {
       loadFavorites();
       loadUnreadCount();
+      loadMenteeProfile();
     }
   }, [user]);
+
+  const loadMenteeProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/mentee/profile/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setMenteeProfile(response.data.profile);
+    } catch (error) {
+      console.error('Failed to load mentee profile:', error);
+    }
+  };
 
   useEffect(() => {
     if (mentors.length > 0) {
@@ -455,7 +472,8 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           </button>
           <div className="user-profile">
             <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNFMUU1RTkiLz4KPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeD0iMTIiIHk9IjEyIj4KPHBhdGggZD0iTTEyIDEyQzE0LjIwOTEgMTIgMTYgMTAuMjA5MSAxNiA4QzE2IDUuNzkwODYgMTQuMjA5MSA0IDEyIDRDOS43OTA4NiA0IDggNS43OTA4NiA4IDhDOCAxMC4yMDkxIDkuNzkwODYgMTIgMTIgMTJaIiBmaWxsPSIjNjY3RUVBIi8+CjxwYXRoIGQ9Ik0xMiAxNEM5LjMzIDEzLjk5IDcuMDEgMTUuNjIgNiAxOEMxMC4wMSAyMCAxMy45OSAyMCAxOCAxOEMxNi45OSAxNS42MiAxNC42NyAxMy45OSAxMiAxNFoiIGZpbGw9IiM2NjdFRUEiLz4KPHN2Zz4KPHN2Zz4=" alt="Profile" />
-            <span>{user.username}</span>
+            <span>{menteeProfile?.name || user.username}</span>
+            <button onClick={() => setShowProfileEditor(true)} className="edit-profile-btn">Edit Profile</button>
             <button onClick={onLogout} className="logout-btn">Logout</button>
           </div>
         </div>
@@ -766,13 +784,19 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 <div className="detail-section">
                   <h3>Education</h3>
                   <div className="education-list">
-                    {selectedMentor.education?.map((edu, index) => (
-                      <div key={index} className="education-item">
-                        <h4>{edu.degree || edu.qualification}</h4>
-                        <p>{edu.institution || edu.school}</p>
-                        <span>{edu.year || edu.duration}</span>
-                      </div>
-                    )) || <p>No education information available</p>}
+                    {selectedMentor.education && selectedMentor.education.length > 0 ? (
+                      selectedMentor.education.map((edu, index) => (
+                        <div key={index} className="education-item">
+                          <h4>{edu.degree || edu.qualification || 'Degree'}</h4>
+                          <p>{edu.institution || edu.school || 'Institution'}</p>
+                          <span>{edu.startYear && edu.endYear ? `${edu.startYear} - ${edu.endYear}` : edu.year || edu.duration || 'Year'}</span>
+                          {edu.field && <p className="field">{edu.field}</p>}
+                          {edu.grade && <span className="grade">Grade: {edu.grade}</span>}
+                        </div>
+                      ))
+                    ) : (
+                      <p>No education information available</p>
+                    )}
                   </div>
                 </div>
                 
@@ -786,22 +810,43 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 </div>
                 
                 <div className="detail-section">
-                  <h3>Background</h3>
+                  <h3>Professional Background</h3>
                   <div className="background-list">
-                    {selectedMentor.background?.map((bg, index) => (
-                      <div key={index} className="background-item">
-                        <h4>{bg.position || bg.title}</h4>
-                        <p>{bg.company || bg.organization}</p>
-                        <span>{bg.duration || bg.year}</span>
-                      </div>
-                    )) || <p>No background information available</p>}
+                    {selectedMentor.background && selectedMentor.background.length > 0 ? (
+                      selectedMentor.background.map((bg, index) => (
+                        <div key={index} className="background-item">
+                          <h4>{bg.position || bg.title || 'Position'}</h4>
+                          <p>{bg.company || bg.organization || 'Company'}</p>
+                          <span>{bg.startDate && bg.endDate ? `${bg.startDate} - ${bg.endDate}` : bg.duration || bg.year || 'Duration'}</span>
+                          {bg.location && <p className="location">{bg.location}</p>}
+                          {bg.description && <p className="description">{bg.description}</p>}
+                        </div>
+                      ))
+                    ) : (
+                      <p>No background information available</p>
+                    )}
                   </div>
                 </div>
                 
                 <div className="detail-section">
                   <h3>Interests</h3>
                   <div className="interests-detailed">
-                    {Array.isArray(selectedMentor.interests) && selectedMentor.interests.length > 0 ? (
+                    {selectedMentor.interestsByCategory && Object.keys(selectedMentor.interestsByCategory).length > 0 ? (
+                      <div className="interests-by-category">
+                        {Object.entries(selectedMentor.interestsByCategory).map(([category, tags]) => (
+                          tags && tags.length > 0 && (
+                            <div key={category} className="category-section">
+                              <h4 className="category-title">{category.replace('_', ' ').toUpperCase()}</h4>
+                              <div className="category-tags">
+                                {tags.map((tag, index) => (
+                                  <span key={index} className="interest-tag">{tag}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    ) : Array.isArray(selectedMentor.interests) && selectedMentor.interests.length > 0 ? (
                       <div className="interests-grid">
                         {selectedMentor.interests.map((interest, index) => (
                           <span key={index} className="category-tag">{interest}</span>
@@ -857,6 +902,16 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           user={user}
           onCallStart={handleCallStart}
           onClose={() => setShowCallModal(false)}
+        />
+      )}
+      {showProfileEditor && (
+        <MenteeProfileEditor 
+          user={user}
+          onClose={() => setShowProfileEditor(false)}
+          onSave={() => {
+            setShowProfileEditor(false);
+            loadMenteeProfile();
+          }}
         />
       )}
     </div>

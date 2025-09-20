@@ -178,7 +178,8 @@ const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
           
           sectionData = {
             selectedCategories: selectedCategories,
-            interests: interestsByCategory
+            interests: profileData.interests, // Keep flat array for backward compatibility
+            interestsByCategory: interestsByCategory // Add categorized version
           };
           break;
         case 'languages':

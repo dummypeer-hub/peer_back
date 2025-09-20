@@ -11,6 +11,14 @@ const ZoomAuthButton = ({ user, onAuthSuccess }) => {
       
       // Get Zoom OAuth URL
       const response = await axios.get(`${config.API_BASE_URL}/zoom/auth-url`);
+      
+      if (response.data.error) {
+        alert(`Zoom configuration error: ${response.data.error}`);
+        console.error('Zoom config error:', response.data.details);
+        setLoading(false);
+        return;
+      }
+      
       const { authUrl } = response.data;
       
       // Open Zoom OAuth in new window
@@ -29,6 +37,7 @@ const ZoomAuthButton = ({ user, onAuthSuccess }) => {
       
     } catch (error) {
       console.error('Zoom auth error:', error);
+      alert('Failed to connect to Zoom. Please check server configuration.');
       setLoading(false);
     }
   };

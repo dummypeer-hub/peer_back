@@ -1,0 +1,50 @@
+.interests-by-category {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.category-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.category-title {
+  font-size: 14px;
+  font-weight: bold;
+  color: #374151;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.category-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.interest-tag {
+  background: #3b82f6;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.education-item .field,
+.education-item .grade,
+.background-item .location,
+.background-item .description {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 4px 0;
+}
+
+.background-item .description {
+  font-style: italic;
+  line-height: 1.4;
+}

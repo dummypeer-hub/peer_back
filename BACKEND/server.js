@@ -101,10 +101,26 @@ pool.connect(async (err, client, release) => {
           updated_at TIMESTAMP DEFAULT NOW()
         );
         
+        CREATE TABLE IF NOT EXISTS mentee_profiles (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) UNIQUE,
+          name VARCHAR(255),
+          profile_picture TEXT,
+          bio TEXT,
+          interests JSONB DEFAULT '[]',
+          skills JSONB DEFAULT '[]',
+          education JSONB DEFAULT '[]',
+          goals TEXT,
+          location VARCHAR(255),
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentor_id ON video_calls(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentee_id ON video_calls(mentee_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_status ON video_calls(status);
         CREATE INDEX IF NOT EXISTS idx_zoom_tokens_mentor_id ON zoom_tokens(mentor_id);
+        CREATE INDEX IF NOT EXISTS idx_mentee_profiles_user_id ON mentee_profiles(user_id);
       `);
       console.log('Video calls and Zoom tokens tables created/verified successfully');
     } catch (tableError) {
@@ -642,8 +658,30 @@ app.get('/api/mentors', async (req, res) => {
       
       try {
         const interestsData = mentor.interests ? (typeof mentor.interests === 'string' ? JSON.parse(mentor.interests) : mentor.interests) : [];
-        interests = Array.isArray(interestsData) ? interestsData : (interestsData.interests || []);
+        if (Array.isArray(interestsData)) {
+          interests = interestsData;
+        } else if (interestsData.interests) {
+          interests = interestsData.interests;
+        } else {
+          interests = [];
+        }
       } catch (e) { interests = []; }
+      
+      let interestsByCategory = {};
+      try {
+        const interestsData = mentor.interests ? (typeof mentor.interests === 'string' ? JSON.parse(mentor.interests) : mentor.interests) : {};
+        interestsByCategory = interestsData.interestsByCategory || {};
+      } catch (e) { interestsByCategory = {}; }
+      
+      let education = [];
+      try {
+        education = mentor.education ? (typeof mentor.education === 'string' ? JSON.parse(mentor.education) : mentor.education) : [];
+      } catch (e) { education = []; }
+      
+      let background = [];
+      try {
+        background = mentor.background ? (typeof mentor.background === 'string' ? JSON.parse(mentor.background) : mentor.background) : [];
+      } catch (e) { background = []; }
       
       try {
         languages = mentor.languages ? (typeof mentor.languages === 'string' ? JSON.parse(mentor.languages) : mentor.languages) : [];
@@ -660,6 +698,9 @@ app.get('/api/mentors', async (req, res) => {
         profilePicture: mentor.profile_picture,
         skills,
         interests,
+        interestsByCategory,
+        education,
+        background,
         languages,
         availability,
         rating: 4.8, // Default rating
@@ -1292,20 +1333,51 @@ app.get('/api/mentee/:menteeId/communities', async (req, res) => {
 
 // Zoom OAuth endpoints
 app.get('/api/zoom/auth-url', (req, res) => {
+  console.log('Zoom credentials check:', {
+    clientId: ZOOM_CLIENT_ID ? 'SET' : 'UNDEFINED',
+    clientSecret: ZOOM_CLIENT_SECRET ? 'SET' : 'UNDEFINED',
+    redirectUri: ZOOM_REDIRECT_URI ? 'SET' : 'UNDEFINED'
+  });
+  
+  if (!ZOOM_CLIENT_ID || !ZOOM_CLIENT_SECRET) {
+    return res.status(500).json({ 
+      error: 'Zoom credentials not configured properly',
+      details: {
+        clientId: !ZOOM_CLIENT_ID ? 'Missing ZOOM_CLIENT_ID' : 'OK',
+        clientSecret: !ZOOM_CLIENT_SECRET ? 'Missing ZOOM_CLIENT_SECRET' : 'OK'
+      }
+    });
+  }
+  
+  // Use dynamic redirect URI based on request origin
+  const origin = req.get('origin') || req.get('referer')?.split('/').slice(0, 3).join('/') || 'https://peerverse-final.vercel.app';
+  const dynamicRedirectUri = `${origin}/zoom/callback`;
+  
   const scopes = 'meeting:write:meeting meeting:read:meeting user:read:user';
-  const authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${ZOOM_CLIENT_ID}&redirect_uri=${encodeURIComponent(ZOOM_REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
-  res.json({ authUrl });
+  const authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${ZOOM_CLIENT_ID}&redirect_uri=${encodeURIComponent(dynamicRedirectUri)}&scope=${encodeURIComponent(scopes)}`;
+  
+  console.log('Generated OAuth URL:', authUrl);
+  console.log('Dynamic redirect URI:', dynamicRedirectUri);
+  console.log('Request origin:', origin);
+  
+  res.json({ authUrl, redirectUri: dynamicRedirectUri });
 });
 
 app.post('/api/zoom/callback', async (req, res) => {
   try {
     const { code, mentorId } = req.body;
     
+    // Get the same dynamic redirect URI used in auth
+    const origin = req.get('origin') || req.get('referer')?.split('/').slice(0, 3).join('/') || 'https://peerverse-final.vercel.app';
+    const dynamicRedirectUri = `${origin}/zoom/callback`;
+    
+    console.log('Token exchange - using redirect URI:', dynamicRedirectUri);
+    
     // Exchange code for access token
     const tokenResponse = await axios.post('https://zoom.us/oauth/token', {
       grant_type: 'authorization_code',
       code,
-      redirect_uri: ZOOM_REDIRECT_URI
+      redirect_uri: dynamicRedirectUri
     }, {
       auth: {
         username: ZOOM_CLIENT_ID,
@@ -1502,6 +1574,60 @@ app.delete('/api/zoom/disconnect/:mentorId', async (req, res) => {
   } catch (error) {
     console.error('Disconnect Zoom error:', error);
     res.status(500).json({ error: 'Failed to disconnect Zoom account' });
+  }
+});
+
+// Mentee Profile endpoints
+app.get('/api/mentee/profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const result = await pool.query(
+      'SELECT * FROM mentee_profiles WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.json({ profile: null });
+    }
+    
+    const profile = result.rows[0];
+    res.json({ profile });
+  } catch (error) {
+    console.error('Get mentee profile error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/mentee/profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { name, profilePicture, bio, interests, skills, education, goals, location } = req.body;
+    
+    // Check if profile exists
+    const existing = await pool.query(
+      'SELECT id FROM mentee_profiles WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (existing.rows.length === 0) {
+      // Create new profile
+      await pool.query(
+        'INSERT INTO mentee_profiles (user_id, name, profile_picture, bio, interests, skills, education, goals, location) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        [userId, name, profilePicture, bio, JSON.stringify(interests || []), JSON.stringify(skills || []), JSON.stringify(education || []), goals, location]
+      );
+    } else {
+      // Update existing profile
+      await pool.query(
+        'UPDATE mentee_profiles SET name = $1, profile_picture = $2, bio = $3, interests = $4, skills = $5, education = $6, goals = $7, location = $8, updated_at = NOW() WHERE user_id = $9',
+        [name, profilePicture, bio, JSON.stringify(interests || []), JSON.stringify(skills || []), JSON.stringify(education || []), goals, location, userId]
+      );
+    }
+    
+    res.json({ message: 'Profile saved successfully' });
+  } catch (error) {
+    console.error('Save mentee profile error:', error);
+    res.status(500).json({ error: 'Server error: ' + error.message });
   }
 });
 
