@@ -13,25 +13,8 @@ import './MentorDashboard.css';
 import './LogoStyles.css';
 
 const MentorDashboard = ({ user, onLogout }) => {
+  // All useState hooks must be at the top
   const [activeCall, setActiveCall] = useState(null);
-  
-  const handleJoinSession = (callId) => {
-    setActiveCall({ callId });
-  };
-  
-  const handleEndCall = () => {
-    setActiveCall(null);
-  };
-  
-  if (activeCall) {
-    return (
-      <CloudflareVideoCall 
-        callId={activeCall.callId}
-        user={user}
-        onEndCall={handleEndCall}
-      />
-    );
-  }
   const [activeTab, setActiveTab] = useState('home');
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [profileCompletion, setProfileCompletion] = useState(25);
@@ -48,6 +31,25 @@ const MentorDashboard = ({ user, onLogout }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showCreateBlog, setShowCreateBlog] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  
+  const handleJoinSession = (callId) => {
+    setActiveCall({ callId });
+  };
+  
+  const handleEndCall = () => {
+    setActiveCall(null);
+  };
+  
+  // Early return after all hooks
+  if (activeCall) {
+    return (
+      <CloudflareVideoCall 
+        callId={activeCall.callId}
+        user={user}
+        onEndCall={handleEndCall}
+      />
+    );
+  }
 
   const handleProfileSave = (profileData) => {
     setShowProfileEditor(false);
