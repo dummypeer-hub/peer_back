@@ -168,11 +168,19 @@ const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
           sectionData = profileData.background;
           break;
         case 'interests':
+          // Ensure we always have selectedCategories
+          const validSelectedCategories = selectedCategories.length > 0 ? selectedCategories : 
+            Object.keys(interestTags).filter(category => 
+              profileData.interests.some(interest => 
+                interestTags[category] && interestTags[category].includes(interest)
+              )
+            );
+          
           // Create proper category-tag mapping
           const interestsByCategory = {};
           
           // Group current interests by their categories
-          selectedCategories.forEach(category => {
+          validSelectedCategories.forEach(category => {
             const categoryTags = profileData.interests.filter(interest => 
               interestTags[category] && interestTags[category].includes(interest)
             );
@@ -182,7 +190,7 @@ const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
           });
           
           sectionData = {
-            selectedCategories: selectedCategories,
+            selectedCategories: validSelectedCategories,
             interestsByCategory: interestsByCategory,
             interests: profileData.interests // Keep for backward compatibility
           };

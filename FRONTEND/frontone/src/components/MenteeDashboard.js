@@ -4,7 +4,7 @@ import config from '../config';
 import BlogSection from './BlogSection';
 import NotificationPanel from './NotificationPanel';
 import CommunityBrowser from './CommunityBrowser';
-import ZoomVideoCall from './ZoomVideoCall';
+import CloudflareVideoCall from './CloudflareVideoCall';
 import CallRequestModal from './CallRequestModal';
 import MenteeProfileEditor from './MenteeProfileEditor';
 
@@ -12,6 +12,7 @@ import SessionsPanel from './SessionsPanel';
 import './MenteeDashboard.css';
 import './InterestStyles.css';
 import './LogoStyles.css';
+import './EnhancedMentorCard.css';
 
 const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -562,7 +563,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
 
   if (activeCall) {
     return (
-      <ZoomVideoCall 
+      <CloudflareVideoCall 
         callId={activeCall.callId}
         user={user}
         onEndCall={handleCallEnd}
@@ -625,7 +626,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
           </button>
           <div className="user-profile">
-            <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNFMUU1RTkiLz4KPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeD0iMTIiIHk9IjEyIj4KPHBhdGggZD0iTTEyIDEyQzE0LjIwOTEgMTIgMTYgMTAuMjA5MSAxNiA4QzE2IDUuNzkwODYgMTQuMjA5MSA0IDEyIDRDOS43OTA4NiA0IDggNS43OTA4NiA4IDhDOCAxMC4yMDkxIDkuNzkwODYgMTIgMTIgMTJaIiBmaWxsPSIjNjY3RUVBIi8+CjxwYXRoIGQ9Ik0xMiAxNEM5LjMzIDEzLjk5IDcuMDEgMTUuNjIgNiAxOEMxMC4wMSAyMCAxMy45OSAyMCAxOCAxOEMxNi45OSAxNS42MiAxNC42NyAxMy45OSAxMiAxNFoiIGZpbGw9IiM2NjdFRUEiLz4KPHN2Zz4KPHN2Zz4=" alt="Profile" />
+            <img src={menteeProfile?.profile_picture || "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNFMUU1RTkiLz4KPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeD0iMTIiIHk9IjEyIj4KPHBhdGggZD0iTTEyIDEyQzE0LjIwOTEgMTIgMTYgMTAuMjA5MSAxNiA4QzE2IDUuNzkwODYgMTQuMjA5MSA0IDEyIDRDOS43OTA4NiA0IDggNS43OTA4NiA4IDhDOCAxMC4yMDkxIDkuNzkwODYgMTIgMTIgMTJaIiBmaWxsPSIjNjY3RUVBIi8+CjxwYXRoIGQ9Ik0xMiAxNEM5LjMzIDEzLjk5IDcuMDEgMTUuNjIgNiAxOEMxMC4wMSAyMCAxMy45OSAyMCAxOCAxOEMxNi45OSAxNS42MiAxNC42NyAxMy45OSAxMiAxNFoiIGZpbGw9IiM2NjdFRUEiLz4KPHN2Zz4KPHN2Zz4="} alt="Profile" />
             <span>{menteeProfile?.name || user.username}</span>
             <button onClick={onLogout} className="logout-btn">Logout</button>
           </div>

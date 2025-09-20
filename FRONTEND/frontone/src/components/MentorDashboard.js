@@ -7,12 +7,31 @@ import CreateBlog from './CreateBlog';
 import NotificationPanel from './NotificationPanel';
 import CommunitySection from './CommunitySection';
 import SessionsPanel from './SessionsPanel';
-import ZoomAuthButton from './ZoomAuthButton';
-import ZoomStatusChecker from './ZoomStatusChecker';
+import CloudflareVideoCall from './CloudflareVideoCall';
+
 import './MentorDashboard.css';
 import './LogoStyles.css';
 
-const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
+const MentorDashboard = ({ user, onLogout }) => {
+  const [activeCall, setActiveCall] = useState(null);
+  
+  const handleJoinSession = (callId) => {
+    setActiveCall({ callId });
+  };
+  
+  const handleEndCall = () => {
+    setActiveCall(null);
+  };
+  
+  if (activeCall) {
+    return (
+      <CloudflareVideoCall 
+        callId={activeCall.callId}
+        user={user}
+        onEndCall={handleEndCall}
+      />
+    );
+  }
   const [activeTab, setActiveTab] = useState('home');
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [profileCompletion, setProfileCompletion] = useState(25);
@@ -247,7 +266,7 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
   const renderSessions = () => (
     <SessionsPanel 
       user={user} 
-      onJoinSession={onJoinSession}
+      onJoinSession={handleJoinSession}
     />
   );
 
@@ -360,20 +379,29 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
         </button>
       </div>
       <div className="settings-section">
-        <h4>🎥 Zoom Integration</h4>
-        <p>Connect your Zoom account to host mentorship video calls</p>
-        <div className="zoom-status">
-          <ZoomStatusChecker user={user} />
-        </div>
-        <ZoomAuthButton 
-          user={user} 
-          onAuthSuccess={() => {
-            alert('Zoom account connected successfully! You can now host video calls.');
-            loadProfileData(); // Refresh to show updated status
-          }}
-        />
-        <div className="zoom-info">
-          <small>ℹ️ Required to accept and host video call sessions with mentees</small>
+        <h4>🎥 Video Call Settings</h4>
+        <p>Video calls are powered by WebRTC technology for secure peer-to-peer communication</p>
+        <div className="webrtc-info">
+          <div className="info-item">
+            <span className="info-icon">✅</span>
+            <span>HD Video & Audio Quality</span>
+          </div>
+          <div className="info-item">
+            <span className="info-icon">🔒</span>
+            <span>End-to-End Encrypted</span>
+          </div>
+          <div className="info-item">
+            <span className="info-icon">💬</span>
+            <span>Real-time Chat</span>
+          </div>
+          <div className="info-item">
+            <span className="info-icon">🖥️</span>
+            <span>Screen Sharing</span>
+          </div>
+          <div className="info-item">
+            <span className="info-icon">⏱️</span>
+            <span>10-Minute Sessions</span>
+          </div>
         </div>
       </div>
     </div>

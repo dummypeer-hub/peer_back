@@ -1,30 +1,54 @@
 .dashboard-logo {
-  height: 60px;
+  height: 80px;
   width: 100%;
-  max-width: 200px;
+  max-width: 280px;
   object-fit: contain;
-  padding: 10px;
+  padding: 15px;
 }
 
 .header-left .dashboard-logo {
-  height: 50px;
+  height: 65px;
   width: auto;
-  max-width: 180px;
+  max-width: 250px;
   object-fit: contain;
-  padding: 5px 0;
+  padding: 8px 0;
 }
 
 .sidebar-header {
-  padding: 15px 10px;
+  padding: 20px 15px;
   display: flex;
   justify-content: center;
   align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-height: 100px;
 }
 
 .sidebar-header .dashboard-logo {
-  height: 70px;
+  height: 85px;
   width: 100%;
-  max-width: 220px;
+  max-width: 300px;
   object-fit: contain;
+}
+
+@media (max-width: 768px) {
+  .dashboard-logo {
+    height: 60px;
+    max-width: 200px;
+    padding: 10px;
+  }
+  
+  .header-left .dashboard-logo {
+    height: 50px;
+    max-width: 180px;
+  }
+  
+  .sidebar-header {
+    padding: 15px 10px;
+    min-height: 80px;
+  }
+  
+  .sidebar-header .dashboard-logo {
+    height: 65px;
+    max-width: 220px;
+  }
 }

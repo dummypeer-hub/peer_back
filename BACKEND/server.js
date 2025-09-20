@@ -25,9 +25,9 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 // Zoom configuration
-const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID;
-const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET;
-const ZOOM_REDIRECT_URI = process.env.ZOOM_REDIRECT_URI;
+// Cloudflare WebRTC Configuration
+const CLOUDFLARE_APP_ID = 'ccb11479d57e58d6450a4743bad9a1e8';
+const CLOUDFLARE_API_TOKEN = '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514';
 
 // Simple in-memory cache
 const cache = new Map();
@@ -89,14 +89,11 @@ pool.connect(async (err, client, release) => {
           CONSTRAINT valid_status CHECK (status IN ('pending', 'accepted', 'rejected', 'active', 'completed', 'cancelled'))
         );
         
-        CREATE TABLE IF NOT EXISTS zoom_tokens (
+        CREATE TABLE IF NOT EXISTS webrtc_sessions (
           id SERIAL PRIMARY KEY,
-          mentor_id INTEGER NOT NULL REFERENCES users(id) UNIQUE,
-          access_token TEXT NOT NULL,
-          refresh_token TEXT NOT NULL,
-          zoom_email VARCHAR(255),
-          zoom_user_id VARCHAR(255),
-          connected_at TIMESTAMP,
+          call_id INTEGER NOT NULL REFERENCES video_calls(id),
+          offer_data JSONB,
+          answer_data JSONB,
           created_at TIMESTAMP DEFAULT NOW(),
           updated_at TIMESTAMP DEFAULT NOW()
         );
@@ -695,9 +692,9 @@ app.get('/api/mentors', async (req, res) => {
         
         if (interestsData.interestsByCategory) {
           interestsByCategory = interestsData.interestsByCategory;
-        } else if (interestsData.selectedCategories && Array.isArray(interestsData.interests)) {
-          // Group flat interests by categories
-          selectedCategories = interestsData.selectedCategories;
+          selectedCategories = interestsData.selectedCategories || Object.keys(interestsByCategory);
+        } else if (Array.isArray(interestsData.interests) && interestsData.interests.length > 0) {
+          // Auto-detect categories for flat interests array
           const interestTags = {
             placement: ['DSA', 'Frontend Development', 'Backend Development', 'Full Stack', 'Mobile Development', 'DevOps', 'Cloud Computing', 'Machine Learning', 'Data Science', 'Cybersecurity', 'System Design', 'Database Management', 'API Development', 'Testing', 'UI/UX Design', 'Product Management', 'Aptitude', 'Resume Building', 'Interview Preparation', 'Coding Practice'],
             college_reviews: ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Mumbai'],
@@ -707,14 +704,18 @@ app.get('/api/mentors', async (req, res) => {
             study_help: ['Mathematics', 'Physics', 'Chemistry', 'Computer Science', 'Electronics', 'Mechanical', 'Civil Engineering', 'Electrical Engineering', 'GATE Preparation', 'JEE Preparation', 'NEET Preparation', 'CAT Preparation', 'GRE Preparation', 'TOEFL Preparation', 'IELTS Preparation', 'Semester Exams', 'Assignment Help', 'Project Reports', 'Research Papers', 'Thesis Writing']
           };
           
-          selectedCategories.forEach(category => {
+          // Auto-detect categories based on interests
+          const detectedCategories = [];
+          Object.keys(interestTags).forEach(category => {
             const categoryTags = interestsData.interests.filter(interest => 
               interestTags[category] && interestTags[category].includes(interest)
             );
             if (categoryTags.length > 0) {
               interestsByCategory[category] = categoryTags;
+              detectedCategories.push(category);
             }
           });
+          selectedCategories = interestsData.selectedCategories || detectedCategories;
         }
       } catch (e) { interestsByCategory = {}; }
       
@@ -1377,7 +1378,82 @@ app.get('/api/mentee/:menteeId/communities', async (req, res) => {
   }
 });
 
-// Zoom OAuth endpoints
+// WebRTC Signaling endpoints
+app.post('/api/webrtc/offer', async (req, res) => {
+  try {
+    const { callId, offer, userId } = req.body;
+    
+    // Store offer in database or memory (using simple in-memory for now)
+    if (!global.webrtcSignals) {
+      global.webrtcSignals = {};
+    }
+    
+    global.webrtcSignals[callId] = {
+      offer,
+      offeredBy: userId,
+      timestamp: Date.now()
+    };
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('WebRTC offer error:', error);
+    res.status(500).json({ error: 'Failed to store offer' });
+  }
+});
+
+app.get('/api/webrtc/offer/:callId', async (req, res) => {
+  try {
+    const { callId } = req.params;
+    
+    const signal = global.webrtcSignals?.[callId];
+    if (signal && signal.offer) {
+      res.json({ offer: signal.offer });
+    } else {
+      res.json({ offer: null });
+    }
+  } catch (error) {
+    console.error('WebRTC get offer error:', error);
+    res.status(500).json({ error: 'Failed to get offer' });
+  }
+});
+
+app.post('/api/webrtc/answer', async (req, res) => {
+  try {
+    const { callId, answer, userId } = req.body;
+    
+    if (!global.webrtcSignals) {
+      global.webrtcSignals = {};
+    }
+    
+    if (global.webrtcSignals[callId]) {
+      global.webrtcSignals[callId].answer = answer;
+      global.webrtcSignals[callId].answeredBy = userId;
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('WebRTC answer error:', error);
+    res.status(500).json({ error: 'Failed to store answer' });
+  }
+});
+
+app.get('/api/webrtc/answer/:callId', async (req, res) => {
+  try {
+    const { callId } = req.params;
+    
+    const signal = global.webrtcSignals?.[callId];
+    if (signal && signal.answer) {
+      res.json({ answer: signal.answer });
+    } else {
+      res.json({ answer: null });
+    }
+  } catch (error) {
+    console.error('WebRTC get answer error:', error);
+    res.status(500).json({ error: 'Failed to get answer' });
+  }
+});
+
+// Zoom OAuth endpoints (DEPRECATED - TO BE REMOVED)
 app.get('/api/zoom/auth-url', (req, res) => {
   console.log('Zoom credentials check:', {
     clientId: ZOOM_CLIENT_ID ? 'SET' : 'UNDEFINED',
@@ -1798,6 +1874,68 @@ app.get('/api/mentee/stats/:menteeId', async (req, res) => {
   } catch (error) {
     console.error('Get mentee stats error:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Data migration endpoint to fix mentor interests format
+app.post('/api/admin/migrate-interests', async (req, res) => {
+  try {
+    const mentorsResult = await pool.query('SELECT user_id, interests FROM mentor_profiles WHERE interests IS NOT NULL');
+    
+    const interestTags = {
+      placement: ['DSA', 'Frontend Development', 'Backend Development', 'Full Stack', 'Mobile Development', 'DevOps', 'Cloud Computing', 'Machine Learning', 'Data Science', 'Cybersecurity', 'System Design', 'Database Management', 'API Development', 'Testing', 'UI/UX Design', 'Product Management', 'Aptitude', 'Resume Building', 'Interview Preparation', 'Coding Practice'],
+      college_reviews: ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Mumbai'],
+      skills_learning: ['JavaScript', 'Python', 'Java', 'C++', 'React', 'Angular', 'Vue.js', 'Node.js', 'Spring Boot', 'Django', 'Flask', 'MongoDB', 'MySQL', 'PostgreSQL', 'AWS', 'Azure', 'Docker', 'Kubernetes', 'Git', 'Linux'],
+      projects: ['Web Development', 'Mobile Apps', 'Desktop Applications', 'Game Development', 'AI/ML Projects', 'Data Analytics', 'Blockchain', 'IoT', 'AR/VR', 'E-commerce', 'Social Media', 'Healthcare', 'Education', 'Finance', 'Entertainment', 'Open Source', 'Startup Ideas', 'Research Projects', 'Hackathon Projects', 'Portfolio Projects'],
+      hackathons: ['Problem Solving', 'Team Formation', 'Idea Generation', 'Prototype Development', 'Presentation Skills', 'Time Management', 'Technology Selection', 'UI/UX Design', 'Backend Development', 'Frontend Development', 'Database Design', 'API Integration', 'Deployment', 'Testing', 'Documentation', 'Pitch Preparation', 'Demo Creation', 'Judging Criteria', 'Networking', 'Post-Hackathon Steps'],
+      study_help: ['Mathematics', 'Physics', 'Chemistry', 'Computer Science', 'Electronics', 'Mechanical', 'Civil Engineering', 'Electrical Engineering', 'GATE Preparation', 'JEE Preparation', 'NEET Preparation', 'CAT Preparation', 'GRE Preparation', 'TOEFL Preparation', 'IELTS Preparation', 'Semester Exams', 'Assignment Help', 'Project Reports', 'Research Papers', 'Thesis Writing']
+    };
+    
+    let migratedCount = 0;
+    
+    for (const mentor of mentorsResult.rows) {
+      try {
+        const interestsData = typeof mentor.interests === 'string' ? JSON.parse(mentor.interests) : mentor.interests;
+        
+        // Check if it's a flat array that needs migration
+        if (Array.isArray(interestsData) && interestsData.length > 0) {
+          const interestsByCategory = {};
+          const selectedCategories = [];
+          
+          // Group interests by categories
+          Object.keys(interestTags).forEach(category => {
+            const categoryTags = interestsData.filter(interest => 
+              interestTags[category] && interestTags[category].includes(interest)
+            );
+            if (categoryTags.length > 0) {
+              interestsByCategory[category] = categoryTags;
+              selectedCategories.push(category);
+            }
+          });
+          
+          // Update with proper format
+          const newInterestsData = {
+            selectedCategories,
+            interestsByCategory,
+            interests: interestsData
+          };
+          
+          await pool.query(
+            'UPDATE mentor_profiles SET interests = $1 WHERE user_id = $2',
+            [JSON.stringify(newInterestsData), mentor.user_id]
+          );
+          
+          migratedCount++;
+        }
+      } catch (e) {
+        console.error(`Failed to migrate interests for mentor ${mentor.user_id}:`, e);
+      }
+    }
+    
+    res.json({ message: `Migrated ${migratedCount} mentor profiles` });
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({ error: 'Migration failed' });
   }
 });
 
