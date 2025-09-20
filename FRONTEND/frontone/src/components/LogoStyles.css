@@ -1,0 +1,11 @@
+.dashboard-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.header-left .dashboard-logo {
+  height: 45px;
+  width: auto;
+  object-fit: contain;
+}

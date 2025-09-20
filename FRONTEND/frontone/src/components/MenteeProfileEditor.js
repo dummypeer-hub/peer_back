@@ -3,7 +3,7 @@ import axios from 'axios';
 import config from '../config';
 import './MenteeProfileEditor.css';
 
-const MenteeProfileEditor = ({ user, onClose, onSave }) => {
+const MenteeProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
   const [profile, setProfile] = useState({
     name: '',
     profilePicture: '',
@@ -54,7 +54,7 @@ const MenteeProfileEditor = ({ user, onClose, onSave }) => {
       
       alert('Profile saved successfully!');
       if (onSave) onSave(profile);
-      if (onClose) onClose();
+      if (onClose && !embedded) onClose();
     } catch (error) {
       console.error('Failed to save profile:', error);
       alert('Failed to save profile. Please try again.');
@@ -82,11 +82,13 @@ const MenteeProfileEditor = ({ user, onClose, onSave }) => {
   };
 
   return (
-    <div className="mentee-profile-editor">
-      <div className="profile-header">
-        <h2>Edit Your Profile</h2>
-        <button onClick={onClose} className="close-btn">×</button>
-      </div>
+    <div className={`mentee-profile-editor ${embedded ? 'embedded' : ''}`}>
+      {!embedded && (
+        <div className="profile-header">
+          <h2>Edit Your Profile</h2>
+          <button onClick={onClose} className="close-btn">×</button>
+        </div>
+      )}
 
       <div className="profile-form">
         <div className="form-section">
@@ -103,12 +105,24 @@ const MenteeProfileEditor = ({ user, onClose, onSave }) => {
           </div>
 
           <div className="form-group">
-            <label>Profile Picture URL</label>
+            <label>Profile Picture</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (e) => setProfile(prev => ({ ...prev, profilePicture: e.target.result }));
+                  reader.readAsDataURL(file);
+                }
+              }}
+            />
             <input
               type="url"
               value={profile.profilePicture}
               onChange={(e) => setProfile(prev => ({ ...prev, profilePicture: e.target.value }))}
-              placeholder="https://example.com/your-photo.jpg"
+              placeholder="Or paste image URL"
             />
             {profile.profilePicture && (
               <div className="profile-preview">
@@ -209,7 +223,7 @@ const MenteeProfileEditor = ({ user, onClose, onSave }) => {
         </div>
 
         <div className="form-actions">
-          <button onClick={onClose} className="cancel-btn">Cancel</button>
+          {!embedded && <button onClick={onClose} className="cancel-btn">Cancel</button>}
           <button onClick={handleSave} disabled={loading} className="save-btn">
             {loading ? 'Saving...' : 'Save Profile'}
           </button>

@@ -116,11 +116,32 @@ pool.connect(async (err, client, release) => {
           updated_at TIMESTAMP DEFAULT NOW()
         );
         
+        CREATE TABLE IF NOT EXISTS mentor_earnings (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          session_id INTEGER REFERENCES video_calls(id),
+          amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+          type VARCHAR(50) DEFAULT 'session', -- session, bonus, tip
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS session_feedback (
+          id SERIAL PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES video_calls(id),
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+          feedback TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentor_id ON video_calls(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentee_id ON video_calls(mentee_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_status ON video_calls(status);
         CREATE INDEX IF NOT EXISTS idx_zoom_tokens_mentor_id ON zoom_tokens(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_mentee_profiles_user_id ON mentee_profiles(user_id);
+        CREATE INDEX IF NOT EXISTS idx_mentor_earnings_mentor_id ON mentor_earnings(mentor_id);
+        CREATE INDEX IF NOT EXISTS idx_session_feedback_session_id ON session_feedback(session_id);
       `);
       console.log('Video calls and Zoom tokens tables created/verified successfully');
     } catch (tableError) {
@@ -1628,6 +1649,106 @@ app.put('/api/mentee/profile/:userId', async (req, res) => {
   } catch (error) {
     console.error('Save mentee profile error:', error);
     res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Statistics endpoints
+app.get('/api/mentor/stats/:mentorId', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    
+    // Get session stats
+    const sessionStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_sessions,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_sessions,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_sessions
+      FROM video_calls WHERE mentor_id = $1
+    `, [mentorId]);
+    
+    // Get blog count
+    const blogStats = await pool.query(
+      'SELECT COUNT(*) as total_blogs FROM blogs WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    // Get earnings
+    const earningsStats = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) as total_earnings FROM mentor_earnings WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    // Get profile completion
+    const profileStats = await pool.query(
+      'SELECT * FROM mentor_profiles WHERE user_id = $1',
+      [mentorId]
+    );
+    
+    let profileCompletion = 0;
+    if (profileStats.rows.length > 0) {
+      const profile = profileStats.rows[0];
+      let completed = 0;
+      let total = 7;
+      
+      if (profile.name) completed++;
+      if (profile.bio) completed++;
+      if (profile.profile_picture) completed++;
+      if (profile.education && JSON.parse(profile.education || '[]').length > 0) completed++;
+      if (profile.skills && JSON.parse(profile.skills || '[]').length > 0) completed++;
+      if (profile.background && JSON.parse(profile.background || '[]').length > 0) completed++;
+      if (profile.interests && JSON.parse(profile.interests || '[]').length > 0) completed++;
+      
+      profileCompletion = Math.round((completed / total) * 100);
+    }
+    
+    res.json({
+      totalSessions: parseInt(sessionStats.rows[0].total_sessions),
+      completedSessions: parseInt(sessionStats.rows[0].completed_sessions),
+      pendingSessions: parseInt(sessionStats.rows[0].pending_sessions),
+      totalBlogs: parseInt(blogStats.rows[0].total_blogs),
+      walletBalance: parseFloat(earningsStats.rows[0].total_earnings),
+      profileCompletion
+    });
+  } catch (error) {
+    console.error('Get mentor stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/mentee/stats/:menteeId', async (req, res) => {
+  try {
+    const { menteeId } = req.params;
+    
+    // Get available mentors count
+    const mentorCount = await pool.query(
+      'SELECT COUNT(*) as available_mentors FROM mentor_profiles mp JOIN users u ON mp.user_id = u.id WHERE u.role = $1',
+      ['mentor']
+    );
+    
+    // Get favorite mentors count
+    const favoriteCount = await pool.query(
+      'SELECT COUNT(*) as favorite_mentors FROM mentee_favorites WHERE mentee_id = $1',
+      [menteeId]
+    );
+    
+    // Get completed sessions count
+    const sessionStats = await pool.query(`
+      SELECT 
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_sessions,
+        COALESCE(SUM(CASE WHEN status = 'completed' AND started_at IS NOT NULL AND ended_at IS NOT NULL 
+          THEN EXTRACT(EPOCH FROM (ended_at::timestamp - started_at::timestamp))/3600 END), 0) as hours_learned
+      FROM video_calls WHERE mentee_id = $1
+    `, [menteeId]);
+    
+    res.json({
+      availableMentors: parseInt(mentorCount.rows[0].available_mentors),
+      favoriteMentors: parseInt(favoriteCount.rows[0].favorite_mentors),
+      completedSessions: parseInt(sessionStats.rows[0].completed_sessions),
+      hoursLearned: parseFloat(sessionStats.rows[0].hours_learned || 0).toFixed(1)
+    });
+  } catch (error) {
+    console.error('Get mentee stats error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

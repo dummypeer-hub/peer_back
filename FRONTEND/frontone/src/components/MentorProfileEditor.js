@@ -168,18 +168,23 @@ const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
           sectionData = profileData.background;
           break;
         case 'interests':
-          // Group interests by category
+          // Create proper category-tag mapping
           const interestsByCategory = {};
+          
+          // Group current interests by their categories
           selectedCategories.forEach(category => {
-            interestsByCategory[category] = profileData.interests.filter(interest => 
+            const categoryTags = profileData.interests.filter(interest => 
               interestTags[category] && interestTags[category].includes(interest)
             );
+            if (categoryTags.length > 0) {
+              interestsByCategory[category] = categoryTags;
+            }
           });
           
           sectionData = {
             selectedCategories: selectedCategories,
-            interests: profileData.interests, // Keep flat array for backward compatibility
-            interestsByCategory: interestsByCategory // Add categorized version
+            interestsByCategory: interestsByCategory,
+            interests: profileData.interests // Keep for backward compatibility
           };
           break;
         case 'languages':

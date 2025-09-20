@@ -10,6 +10,7 @@ import SessionsPanel from './SessionsPanel';
 import ZoomAuthButton from './ZoomAuthButton';
 import ZoomStatusChecker from './ZoomStatusChecker';
 import './MentorDashboard.css';
+import './LogoStyles.css';
 
 const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
   const [activeTab, setActiveTab] = useState('home');
@@ -17,13 +18,13 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
   const [profileCompletion, setProfileCompletion] = useState(25);
   const [profilePicture, setProfilePicture] = useState('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMzAiIGZpbGw9IiNFMUU1RTkiLz4KPHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeD0iMTgiIHk9IjE4Ij4KPHBhdGggZD0iTTEyIDEyQzE0LjIwOTEgMTIgMTYgMTAuMjA5MSAxNiA4QzE2IDUuNzkwODYgMTQuMjA5MSA0IDEyIDRDOS43OTA4NiA0IDggNS43OTA4NiA4IDhDOCAxMC4yMDkxIDkuNzkwODYgMTIgMTIgMTJaIiBmaWxsPSIjNjY3RUVBIi8+CjxwYXRoIGQ9Ik0xMiAxNEM5LjMzIDEzLjk5IDcuMDEgMTUuNjIgNiAxOEMxMC4wMSAyMCAxMy45OSAyMCAxOCAxOEMxNi45OSAxNS42MiAxNC42NyAxMy45OSAxMiAxNFoiIGZpbGw9IiM2NjdFRUEiLz4KPHN2Zz4KPHN2Zz4=');
   const [stats, setStats] = useState({
-    totalSessions: 12,
-    totalBlogs: 5,
-    walletBalance: 2500
+    totalSessions: 0,
+    completedSessions: 0,
+    pendingSessions: 0,
+    totalBlogs: 0,
+    walletBalance: 0
   });
-  const [upcomingSessions, setUpcomingSessions] = useState([
-    { id: 1, mentee: 'John Doe', date: '2024-01-15', time: '10:00 AM', topic: 'React Development' }
-  ]);
+  const [upcomingSessions, setUpcomingSessions] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showCreateBlog, setShowCreateBlog] = useState(false);
@@ -36,19 +37,46 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
   };
   
   useEffect(() => {
-    // Load profile data on mount
-    loadProfileData();
     if (user?.id) {
+      loadProfileData();
       loadNotifications();
+      loadStats();
+      loadUpcomingSessions();
       
-      // Set up periodic notification refresh
       const interval = setInterval(() => {
         loadNotifications();
-      }, 30000); // Check every 30 seconds
+        loadStats();
+      }, 30000);
       
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  const loadStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/mentor/stats/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setStats(response.data);
+      setProfileCompletion(response.data.profileCompletion);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  };
+
+  const loadUpcomingSessions = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/video-calls/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const pending = response.data.calls?.filter(call => call.status === 'pending') || [];
+      setUpcomingSessions(pending);
+    } catch (error) {
+      console.error('Failed to load upcoming sessions:', error);
+    }
+  };
 
   const loadNotifications = async () => {
     if (!user?.id) return;
@@ -378,7 +406,7 @@ const MentorDashboard = ({ user, onLogout, onJoinSession }) => {
     <div className="mentor-dashboard">
       <div className="sidebar">
         <div className="sidebar-header">
-          <h2>PeerSync</h2>
+          <img src="/final_logooooo_peerverse.png" alt="PeerVerse" className="dashboard-logo" />
         </div>
         
         <div className="mentor-profile-section">

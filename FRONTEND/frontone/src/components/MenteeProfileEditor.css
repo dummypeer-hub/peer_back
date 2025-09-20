@@ -11,6 +11,13 @@
   z-index: 1000;
 }
 
+.mentee-profile-editor.embedded {
+  position: static;
+  background: none;
+  display: block;
+  z-index: auto;
+}
+
 .profile-header {
   display: flex;
   justify-content: space-between;
@@ -39,6 +46,14 @@
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
+}
+
+.mentee-profile-editor.embedded .profile-form {
+  max-width: none;
+  width: 100%;
+  max-height: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .form-section {

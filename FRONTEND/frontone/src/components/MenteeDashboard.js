@@ -11,6 +11,7 @@ import MenteeProfileEditor from './MenteeProfileEditor';
 import SessionsPanel from './SessionsPanel';
 import './MenteeDashboard.css';
 import './InterestStyles.css';
+import './LogoStyles.css';
 
 const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,10 +21,44 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [loading, setLoading] = useState(false);
 
   const interestCategories = {
-    placement: ['DSA', 'Frontend Development', 'Backend Development', 'Full Stack', 'Mobile Development'],
-    skills_learning: ['JavaScript', 'Python', 'Java', 'React', 'Node.js'],
-    projects: ['Web Development', 'Mobile Apps', 'AI/ML Projects', 'Blockchain'],
-    study_help: ['Mathematics', 'Computer Science', 'GATE Preparation']
+    placement: [
+      'DSA', 'Frontend Development', 'Backend Development', 'Full Stack', 'Mobile Development',
+      'DevOps', 'Cloud Computing', 'Machine Learning', 'Data Science', 'Cybersecurity',
+      'System Design', 'Database Management', 'API Development', 'Testing', 'UI/UX Design',
+      'Product Management', 'Aptitude', 'Resume Building', 'Interview Preparation', 'Coding Practice'
+    ],
+    college_reviews: [
+      'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
+      'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh',
+      'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+      'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh',
+      'Uttarakhand', 'West Bengal', 'Delhi', 'Mumbai'
+    ],
+    skills_learning: [
+      'JavaScript', 'Python', 'Java', 'C++', 'React', 'Angular', 'Vue.js', 'Node.js',
+      'Spring Boot', 'Django', 'Flask', 'MongoDB', 'MySQL', 'PostgreSQL', 'AWS',
+      'Azure', 'Docker', 'Kubernetes', 'Git', 'Linux'
+    ],
+    projects: [
+      'Web Development', 'Mobile Apps', 'Desktop Applications', 'Game Development',
+      'AI/ML Projects', 'Data Analytics', 'Blockchain', 'IoT', 'AR/VR', 'E-commerce',
+      'Social Media', 'Healthcare', 'Education', 'Finance', 'Entertainment',
+      'Open Source', 'Startup Ideas', 'Research Projects', 'Hackathon Projects', 'Portfolio Projects'
+    ],
+    hackathons: [
+      'Problem Solving', 'Team Formation', 'Idea Generation', 'Prototype Development',
+      'Presentation Skills', 'Time Management', 'Technology Selection', 'UI/UX Design',
+      'Backend Development', 'Frontend Development', 'Database Design', 'API Integration',
+      'Deployment', 'Testing', 'Documentation', 'Pitch Preparation', 'Demo Creation',
+      'Judging Criteria', 'Networking', 'Post-Hackathon Steps'
+    ],
+    study_help: [
+      'Mathematics', 'Physics', 'Chemistry', 'Computer Science', 'Electronics', 'Mechanical',
+      'Civil Engineering', 'Electrical Engineering', 'GATE Preparation', 'JEE Preparation',
+      'NEET Preparation', 'CAT Preparation', 'GRE Preparation', 'TOEFL Preparation',
+      'IELTS Preparation', 'Semester Exams', 'Assignment Help', 'Project Reports',
+      'Research Papers', 'Thesis Writing'
+    ]
   };
 
   useEffect(() => {
@@ -170,6 +205,22 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [showCallModal, setShowCallModal] = useState(false);
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [menteeProfile, setMenteeProfile] = useState(null);
+  const [stats, setStats] = useState({
+    availableMentors: 0,
+    favoriteMentors: 0,
+    completedSessions: 0,
+    hoursLearned: 0
+  });
+  const [showInterestBrowser, setShowInterestBrowser] = useState(false);
+
+  const mainInterests = [
+    'PLACEMENT',
+    'COLLEGE REVIEWS', 
+    'SKILLS LEARNING',
+    'PROJECTS',
+    'HACKATHONS',
+    'STUDY HELP'
+  ];
 
 
   const mainInterests = [
@@ -182,8 +233,22 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       loadFavorites();
       loadUnreadCount();
       loadMenteeProfile();
+      loadMenteeStats();
     }
   }, [user]);
+
+  const loadMenteeStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/mentee/stats/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Update the stats in the home section
+      setStats(response.data);
+    } catch (error) {
+      console.error('Failed to load mentee stats:', error);
+    }
+  };
 
   const loadMenteeProfile = async () => {
     try {
@@ -375,15 +440,26 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
         <div className="mentor-interests-section">
           <h4>Interests:</h4>
           <div className="interests-list">
-            {Array.isArray(mentor.interests) && mentor.interests.length > 0 ? (
+            {mentor.interestsByCategory && Object.keys(mentor.interestsByCategory).length > 0 ? (
+              Object.entries(mentor.interestsByCategory).slice(0, 2).map(([category, tags]) => (
+                tags && tags.length > 0 && (
+                  <div key={category} className="interest-category">
+                    <span className="category-name">{category.replace('_', ' ').toUpperCase()}</span>
+                    <div className="category-tags-inline">
+                      {tags.slice(0, 3).map((tag, index) => (
+                        <span key={index} className="interest-tag-small">{tag}</span>
+                      ))}
+                      {tags.length > 3 && <span className="more-tags">+{tags.length - 3}</span>}
+                    </div>
+                  </div>
+                )
+              ))
+            ) : Array.isArray(mentor.interests) && mentor.interests.length > 0 ? (
               mentor.interests.slice(0, 3).map((interest, index) => (
                 <span key={index} className="category-tag">{interest}</span>
               ))
             ) : (
               <span className="no-interests">No interests listed</span>
-            )}
-            {mentor.interests?.length > 3 && (
-              <span className="more-interests">+{mentor.interests.length - 3} more</span>
             )}
           </div>
         </div>
@@ -427,7 +503,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       {/* Header */}
       <header className="dashboard-header">
         <div className="header-left">
-          <h1 className="app-name">PeerSync</h1>
+          <img src="/final_logooooo_peerverse.png" alt="PeerVerse" className="dashboard-logo" />
           <nav className="main-nav">
             <button 
               className={`nav-link ${currentSection === 'home' ? 'active' : ''}`}
@@ -459,6 +535,12 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             >
               Sessions
             </button>
+            <button 
+              className={`nav-link ${currentSection === 'profile' ? 'active' : ''}`}
+              onClick={() => setCurrentSection('profile')}
+            >
+              Profile
+            </button>
             <button className="nav-link">Wallet</button>
           </nav>
         </div>
@@ -473,7 +555,6 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           <div className="user-profile">
             <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNFMUU1RTkiLz4KPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeD0iMTIiIHk9IjEyIj4KPHBhdGggZD0iTTEyIDEyQzE0LjIwOTEgMTIgMTYgMTAuMjA5MSAxNiA4QzE2IDUuNzkwODYgMTQuMjA5MSA0IDEyIDRDOS43OTA4NiA0IDggNS43OTA4NiA4IDhDOCAxMC4yMDkxIDkuNzkwODYgMTIgMTIgMTJaIiBmaWxsPSIjNjY3RUVBIi8+CjxwYXRoIGQ9Ik0xMiAxNEM5LjMzIDEzLjk5IDcuMDEgMTUuNjIgNiAxOEMxMC4wMSAyMCAxMy45OSAyMCAxOCAxOEMxNi45OSAxNS42MiAxNC42NyAxMy45OSAxMiAxNFoiIGZpbGw9IiM2NjdFRUEiLz4KPHN2Zz4KPHN2Zz4=" alt="Profile" />
             <span>{menteeProfile?.name || user.username}</span>
-            <button onClick={() => setShowProfileEditor(true)} className="edit-profile-btn">Edit Profile</button>
             <button onClick={onLogout} className="logout-btn">Logout</button>
           </div>
         </div>
@@ -487,19 +568,19 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           <div className="stats-section">
             <div className="stats-container">
               <div className="stat-item">
-                <div className="stat-number">{filteredMentors.length}</div>
+                <div className="stat-number">{stats.availableMentors}</div>
                 <div className="stat-label">Available Mentors</div>
               </div>
               <div className="stat-item">
-                <div className="stat-number">{favorites.length}</div>
+                <div className="stat-number">{stats.favoriteMentors}</div>
                 <div className="stat-label">Favorite Mentors</div>
               </div>
               <div className="stat-item">
-                <div className="stat-number">0</div>
+                <div className="stat-number">{stats.completedSessions}</div>
                 <div className="stat-label">Completed Sessions</div>
               </div>
               <div className="stat-item">
-                <div className="stat-number">0</div>
+                <div className="stat-number">{stats.hoursLearned}</div>
                 <div className="stat-label">Hours Learned</div>
               </div>
             </div>
@@ -520,23 +601,37 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                   🔍 Search
                 </button>
               </div>
-              <div className="browse-dropdown">
-                <select
-                  value={selectedInterest}
-                  onChange={(e) => {
-                    setSelectedInterest(e.target.value);
-                    setTimeout(handleSearch, 100);
-                  }}
+              <div className="interest-browser">
+                <button 
+                  className="browse-toggle"
+                  onClick={() => setShowInterestBrowser(!showInterestBrowser)}
                 >
-                  <option value="">Browse by Interest</option>
-                  {Object.entries(interestCategories).map(([category, interests]) => (
-                    <optgroup key={category} label={category.replace('_', ' ').toUpperCase()}>
-                      {interests.map(interest => (
-                        <option key={interest} value={interest}>{interest}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+                  🎯 Browse by Interest {showInterestBrowser ? '▲' : '▼'}
+                </button>
+                
+                {showInterestBrowser && (
+                  <div className="interest-categories">
+                    {mainInterests.map(category => (
+                      <div key={category} className="interest-category-section">
+                        <h4 className="category-header">{category}</h4>
+                        <div className="category-tags">
+                          {interestCategories[category.toLowerCase().replace(' ', '_')]?.map(tag => (
+                            <button
+                              key={tag}
+                              className={`interest-tag-btn ${selectedInterest === tag ? 'selected' : ''}`}
+                              onClick={() => {
+                                setSelectedInterest(selectedInterest === tag ? '' : tag);
+                                setTimeout(handleSearch, 100);
+                              }}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -547,28 +642,41 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
               <button className="quick-action-btn" onClick={() => {
                 setSelectedInterest('');
                 setSearchQuery('');
+                setShowInterestBrowser(false);
                 setTimeout(handleSearch, 100);
               }}>
                 🔍 All Mentors
               </button>
               <button className="quick-action-btn" onClick={() => {
                 setSelectedInterest('JavaScript');
+                setShowInterestBrowser(false);
                 setTimeout(handleSearch, 100);
               }}>
                 💻 JavaScript
               </button>
               <button className="quick-action-btn" onClick={() => {
                 setSelectedInterest('Python');
+                setShowInterestBrowser(false);
                 setTimeout(handleSearch, 100);
               }}>
                 🐍 Python
               </button>
               <button className="quick-action-btn" onClick={() => {
-                setSelectedInterest('React');
+                setSelectedInterest('DSA');
+                setShowInterestBrowser(false);
                 setTimeout(handleSearch, 100);
               }}>
-                ⚛️ React
+                🧮 DSA
               </button>
+              {selectedInterest && (
+                <button className="quick-action-btn clear-btn" onClick={() => {
+                  setSelectedInterest('');
+                  setShowInterestBrowser(false);
+                  setTimeout(handleSearch, 100);
+                }}>
+                  ❌ Clear: {selectedInterest}
+                </button>
+              )}
             </div>
           </div>
 
@@ -754,6 +862,18 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
         />
       )}
 
+      {currentSection === 'profile' && (
+        <div className="profile-section">
+          <MenteeProfileEditor 
+            user={user}
+            embedded={true}
+            onSave={() => {
+              loadMenteeProfile();
+            }}
+          />
+        </div>
+      )}
+
       <NotificationPanel 
         user={user}
         isOpen={showNotifications}
@@ -904,16 +1024,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           onClose={() => setShowCallModal(false)}
         />
       )}
-      {showProfileEditor && (
-        <MenteeProfileEditor 
-          user={user}
-          onClose={() => setShowProfileEditor(false)}
-          onSave={() => {
-            setShowProfileEditor(false);
-            loadMenteeProfile();
-          }}
-        />
-      )}
+
     </div>
   );
 };
