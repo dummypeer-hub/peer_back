@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import ZoomVideoCall from './ZoomVideoCall';
+import CloudflareVideoCall from './CloudflareVideoCall';
 
 const VideoCallPage = () => {
   const { callId } = useParams();
@@ -41,7 +41,7 @@ const VideoCallPage = () => {
   }
 
   return (
-    <ZoomVideoCall 
+    <CloudflareVideoCall 
       callId={callId}
       user={user}
       onEndCall={handleEndCall}
