@@ -136,10 +136,12 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const setupSocket = async (pc) => {
     return new Promise((resolve, reject) => {
       const socket = io(config.SOCKET_URL, {
-        transports: ['polling', 'websocket'],
-        timeout: 15000,
-        forceNew: true,
-        reconnection: false
+        transports: ['polling'],
+        timeout: 30000,
+        forceNew: false,
+        reconnection: true,
+        reconnectionAttempts: 3,
+        reconnectionDelay: 1000
       });
 
       socketRef.current = socket;
@@ -147,14 +149,17 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       socket.on('connect', () => {
         console.log(`✅ ${user.role} socket connected for call ${callId}`);
         
-        // Join rooms with delay to ensure server processing
+        // Join rooms immediately - no delay needed
+        socket.emit('join_user_room', user.id);
+        socket.emit('join_call', callId);
+        console.log(`🏠 ${user.role} attempting to join rooms: user_${user.id}, call_${callId}`);
+        
+        // Confirm room joining
         setTimeout(() => {
-          socket.emit('join_user_room', user.id);
-          socket.emit('join_call', callId);
-          console.log(`🏠 ${user.role} joined rooms: user_${user.id}, call_${callId}`);
+          console.log(`🔍 ${user.role} confirming room membership...`);
           setupSignaling(pc, socket);
           resolve();
-        }, 500);
+        }, 100);
       });
 
       socket.on('connect_error', (error) => {
@@ -199,9 +204,14 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       console.log(`📡 ${user.role} signaling state: ${pc.signalingState}`);
     };
 
+    // Room join confirmation
+    socket.on('room_joined', (data) => {
+      console.log(`✅ ${user.role} CONFIRMED joined room ${data.room}, participants: ${data.participantCount}`);
+    });
+    
     // Participant tracking
     socket.on('participant_joined', (data) => {
-      console.log(`👥 Participant joined call ${data.callId}, total: ${data.participantCount}`);
+      console.log(`👥 Another participant joined call ${data.callId}, total: ${data.participantCount}`);
       if (data.participantCount >= 2 && user.role === 'mentor') {
         console.log('📤 Both participants ready, mentor will create offer in 3 seconds...');
       }
@@ -278,39 +288,43 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       }
     });
 
-    // Start signaling if mentor (wait for both to join)
+    // Start signaling if mentor (wait for room confirmation)
     if (user.role === 'mentor') {
-      console.log('📤 Mentor will create offer in 3 seconds...');
-      setTimeout(async () => {
-        try {
-          console.log('📤 🚀 MENTOR CREATING OFFER NOW...');
-          console.log('PC signaling state before offer:', pc.signalingState);
-          console.log('PC connection state before offer:', pc.connectionState);
-          
-          const offer = await pc.createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: true
-          });
-          
-          console.log('📤 Offer created, setting local description...');
-          await pc.setLocalDescription(offer);
-          
-          console.log('📤 Local description set, sending offer...');
-          console.log('Offer SDP preview:', offer.sdp.substring(0, 100) + '...');
-          
-          socket.emit('offer', { 
-            callId, 
-            offer, 
-            from: user.id, 
-            role: user.role,
-            timestamp: Date.now()
-          });
-          
-          console.log('✅ 📤 OFFER SENT SUCCESSFULLY TO MENTEE!');
-        } catch (error) {
-          console.error('❌ 📤 FAILED TO CREATE/SEND OFFER:', error);
-        }
-      }, 3000);
+      console.log('📤 Mentor will create offer after room confirmation...');
+      
+      // Wait for room join confirmation, then create offer
+      socket.on('room_joined', () => {
+        setTimeout(async () => {
+          try {
+            console.log('📤 🚀 MENTOR CREATING OFFER NOW...');
+            console.log('PC signaling state before offer:', pc.signalingState);
+            console.log('PC connection state before offer:', pc.connectionState);
+            
+            const offer = await pc.createOffer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: true
+            });
+            
+            console.log('📤 Offer created, setting local description...');
+            await pc.setLocalDescription(offer);
+            
+            console.log('📤 Local description set, sending offer...');
+            console.log('Offer SDP preview:', offer.sdp.substring(0, 100) + '...');
+            
+            socket.emit('offer', { 
+              callId, 
+              offer, 
+              from: user.id, 
+              role: user.role,
+              timestamp: Date.now()
+            });
+            
+            console.log('✅ 📤 OFFER SENT SUCCESSFULLY TO MENTEE!');
+          } catch (error) {
+            console.error('❌ 📤 FAILED TO CREATE/SEND OFFER:', error);
+          }
+        }, 2000); // 2 second delay after room join
+      });
     } else {
       console.log('📨 Mentee waiting for offer from mentor...');
     }

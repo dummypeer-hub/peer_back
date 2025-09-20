@@ -1,0 +1,32 @@
+/* Mentor Dashboard Specific Logo Styles */
+.mentor-dashboard .sidebar-header .dashboard-logo {
+  height: 120px;
+  width: auto;
+  max-width: 400px;
+  min-width: 300px;
+  object-fit: contain;
+  padding: 10px;
+}
+
+.mentor-dashboard .sidebar-header {
+  padding: 15px 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-height: 100px;
+}
+
+@media (max-width: 768px) {
+  .mentor-dashboard .sidebar-header {
+    padding: 10px 8px;
+    min-height: 80px;
+  }
+  
+  .mentor-dashboard .sidebar-header .dashboard-logo {
+    height: 120px;
+    max-width: 350px;
+    min-width: 250px;
+    padding: 8px;
+  }
+}

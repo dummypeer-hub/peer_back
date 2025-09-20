@@ -2103,6 +2103,13 @@ io.on('connection', (socket) => {
     const roomSize = io.sockets.adapter.rooms.get(`call_${callId}`)?.size || 0;
     console.log(`[${new Date().toLocaleTimeString()}] 📞 User joined call room: call_${callId} (${roomSize} participants)`);
     
+    // Send confirmation back to the user who joined
+    socket.emit('room_joined', {
+      callId,
+      room: `call_${callId}`,
+      participantCount: roomSize
+    });
+    
     // Notify others in the room
     socket.to(`call_${callId}`).emit('participant_joined', {
       callId,
