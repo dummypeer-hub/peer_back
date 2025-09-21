@@ -159,12 +159,15 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       peerConnectionRef.current = pc;
 
-      // Add tracks
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      // Add tracks with labels
+      stream.getTracks().forEach(track => {
+        console.log(`Adding ${track.kind} track:`, track.label);
+        pc.addTrack(track, stream);
+      });
 
       // Handle remote stream
       pc.ontrack = (event) => {
-        console.log('📺 Remote stream received');
+        console.log('📺 Remote stream received:', event.track.kind);
         const [stream] = event.streams;
         setRemoteStream(stream);
         if (remoteVideoRef.current) {
@@ -611,18 +614,28 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const toggleScreenShare = async () => {
     try {
       if (!isScreenSharing) {
+        console.log('🖥️ Starting screen share...');
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
           audio: true
         });
         
         const videoTrack = screenStream.getVideoTracks()[0];
-        const sender = peerConnectionRef.current.getSenders().find(s => 
+        const audioTrack = screenStream.getAudioTracks()[0];
+        
+        // Replace video track
+        const videoSender = peerConnectionRef.current.getSenders().find(s => 
           s.track && s.track.kind === 'video'
         );
+        if (videoSender) {
+          console.log('🔄 Replacing video track with screen share');
+          await videoSender.replaceTrack(videoTrack);
+        }
         
-        if (sender) {
-          await sender.replaceTrack(videoTrack);
+        // Add audio track if available
+        if (audioTrack) {
+          console.log('🔄 Adding screen share audio');
+          peerConnectionRef.current.addTrack(audioTrack, screenStream);
         }
         
         // Update local video to show screen share
@@ -632,24 +645,35 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         
         videoTrack.onended = () => stopScreenShare();
         setIsScreenSharing(true);
+        console.log('✅ Screen share started');
       } else {
         stopScreenShare();
       }
     } catch (error) {
-      console.error('Screen share error:', error);
+      console.error('❌ Screen share error:', error);
     }
   };
 
   const stopScreenShare = async () => {
+    console.log('🚫 Stopping screen share...');
     if (localStream) {
       const videoTrack = localStream.getVideoTracks()[0];
-      const sender = peerConnectionRef.current.getSenders().find(s => 
+      const videoSender = peerConnectionRef.current.getSenders().find(s => 
         s.track && s.track.kind === 'video'
       );
       
-      if (sender && videoTrack) {
-        await sender.replaceTrack(videoTrack);
+      if (videoSender && videoTrack) {
+        console.log('🔄 Restoring camera video track');
+        await videoSender.replaceTrack(videoTrack);
       }
+      
+      // Remove screen share audio tracks
+      const senders = peerConnectionRef.current.getSenders();
+      senders.forEach(sender => {
+        if (sender.track && sender.track.label.includes('screen')) {
+          peerConnectionRef.current.removeTrack(sender);
+        }
+      });
       
       // Restore local video to show camera
       if (localVideoRef.current) {
@@ -657,6 +681,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       }
     }
     setIsScreenSharing(false);
+    console.log('✅ Screen share stopped');
   };
 
   const sendMessage = () => {
@@ -769,7 +794,16 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     <div className="cloudflare-video-call">
       <div className="video-container">
         <div className="remote-video">
-          <video ref={remoteVideoRef} autoPlay playsInline />
+          <video 
+            ref={remoteVideoRef} 
+            autoPlay 
+            playsInline 
+            style={{ 
+              maxWidth: '100%', 
+              maxHeight: '100%',
+              objectFit: 'contain'
+            }} 
+          />
           {!remoteStream && (
             <div className="waiting-message">
               <div>Waiting for other participant...</div>
@@ -786,10 +820,20 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         </div>
         
         <div className="local-video">
-          <video ref={localVideoRef} autoPlay playsInline muted />
+          <video 
+            ref={localVideoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            style={{ 
+              width: '100%', 
+              height: '100%',
+              objectFit: 'cover'
+            }}
+          />
           {isScreenSharing && (
             <div className="screen-share-indicator">
-              🖥️ Sharing Screen
+              🖥️ Screen
             </div>
           )}
         </div>
