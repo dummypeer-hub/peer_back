@@ -446,6 +446,8 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           return;
         }
         
+
+        
         setTimeout(async () => {
           try {
             console.log('📤 🚀 MENTOR CREATING OFFER NOW...');
@@ -467,13 +469,28 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             console.log('📤 Sending offer to mentee...');
             console.log('Offer SDP preview:', offer.sdp.substring(0, 100) + '...');
             
-            socket.emit('offer', { 
+            // Send offer multiple times to ensure delivery
+            const offerData = { 
               callId, 
               offer, 
               from: user.id, 
               role: user.role,
               timestamp: Date.now()
-            });
+            };
+            
+            socket.emit('offer', offerData);
+            
+            // Retry offer sending with connection state check
+            let retryCount = 0;
+            const retryInterval = setInterval(() => {
+              if (retryCount < 3 && pc.connectionState !== 'connected') {
+                console.log(`📤 Retrying offer send (${retryCount + 1}/3)...`);
+                socket.emit('offer', offerData);
+                retryCount++;
+              } else {
+                clearInterval(retryInterval);
+              }
+            }, 1500);
             
             offerSent = true;
             console.log('✅ 📤 OFFER SENT SUCCESSFULLY TO MENTEE!');
@@ -485,7 +502,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
               stack: error.stack
             });
           }
-        }, 2000); // 2 second delay after room join
+        }, 3000); // 3 second delay to wait for mentee
       };
       
       socket.on('room_joined', createOfferHandler);
@@ -494,7 +511,24 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       socket.on('participant_joined', (data) => {
         if (data.participantCount >= 2) {
           console.log('📤 Participant joined, mentor will create offer...');
-          createOfferHandler();
+          // Wait a bit for mentee to be ready, then send offer
+          setTimeout(() => {
+            if (!offerSent) {
+              createOfferHandler();
+            } else {
+              // Resend existing offer to new participant
+              console.log('📤 Resending offer to new participant...');
+              if (pc.localDescription) {
+                socket.emit('offer', { 
+                  callId, 
+                  offer: pc.localDescription, 
+                  from: user.id, 
+                  role: user.role,
+                  timestamp: Date.now()
+                });
+              }
+            }
+          }, 1000);
         }
       });
     } else {
