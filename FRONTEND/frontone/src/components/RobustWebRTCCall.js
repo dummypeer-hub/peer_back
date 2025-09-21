@@ -625,6 +625,11 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           await sender.replaceTrack(videoTrack);
         }
         
+        // Update local video to show screen share
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = screenStream;
+        }
+        
         videoTrack.onended = () => stopScreenShare();
         setIsScreenSharing(true);
       } else {
@@ -644,6 +649,11 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       
       if (sender && videoTrack) {
         await sender.replaceTrack(videoTrack);
+      }
+      
+      // Restore local video to show camera
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStream;
       }
     }
     setIsScreenSharing(false);
@@ -777,6 +787,11 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         
         <div className="local-video">
           <video ref={localVideoRef} autoPlay playsInline muted />
+          {isScreenSharing && (
+            <div className="screen-share-indicator">
+              🖥️ Sharing Screen
+            </div>
+          )}
         </div>
       </div>
 
@@ -785,9 +800,6 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           <span className={timeLeft < 60 ? 'warning' : ''}>
             {formatTime(timeLeft)}
           </span>
-          <div style={{ fontSize: '10px', opacity: 0.6 }}>
-            {user.role} | {connectionState}
-          </div>
         </div>
 
         <div className="control-buttons">
@@ -835,7 +847,6 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             <button 
               onClick={() => window.location.reload()} 
               className="retry-btn"
-              style={{ marginLeft: '10px', padding: '2px 8px', fontSize: '12px' }}
             >
               Retry
             </button>
@@ -844,7 +855,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         
         <div className="chat-messages">
           {messages.map((msg, index) => (
-            <div key={index} className="chat-message">
+            <div key={index} className={`chat-message ${msg.from === user.id ? 'own-message' : 'other-message'}`}>
               <div className="message-header">
                 <span className="sender">{msg.sender}</span>
                 <span className="time">{msg.timestamp}</span>
@@ -866,6 +877,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           <button 
             onClick={sendMessage}
             disabled={!newMessage.trim() || !isConnected}
+            className="send-btn"
           >
             Send
           </button>

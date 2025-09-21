@@ -302,30 +302,16 @@ const SessionsPanel = ({ user, onJoinSession }) => {
                   </>
                 )}
                 
-                {session.status === 'accepted' && !session.ended_at && (
-                  <button 
-                    onClick={() => handleJoinSession(session.id, session.channel_name)}
-                    className="join-btn primary"
-                  >
-                    <span className="btn-icon">🎥</span>
-                    <span className="btn-text">Join Meeting</span>
-                  </button>
-                )}
+
                 
                 {session.status === 'completed' && (
                   <span className="meeting-completed">✅ Meeting Completed</span>
                 )}
                 
-                {session.status === 'active' && session.started_at && !session.ended_at && (
+                {(session.status === 'active' || session.status === 'accepted') && session.started_at && !session.ended_at && (
                   (() => {
-                    const startTime = new Date(session.started_at);
+                    const startTime = new Date(session.started_at || session.accepted_at);
                     const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
-                    console.log('Session check:', {
-                      sessionId: session.id,
-                      startTime: startTime.toLocaleString(),
-                      elapsed,
-                      remaining: 600 - elapsed
-                    });
                     
                     // If more than 10 minutes have passed, mark as expired
                     if (elapsed >= 600) {
@@ -336,23 +322,36 @@ const SessionsPanel = ({ user, onJoinSession }) => {
                             userId: user.id,
                             reason: 'time_expired'
                           });
-                          loadSessions(); // Refresh sessions
+                          loadSessions();
                         } catch (error) {
                           console.error('Failed to end expired session:', error);
                         }
                       }, 100);
-                      return <span className="session-expired">Session Expired</span>;
+                      return <span className="session-expired">✅ Meeting Completed</span>;
                     }
+                    
+                    const remainingMinutes = Math.floor((600 - elapsed) / 60);
+                    const remainingSeconds = (600 - elapsed) % 60;
                     
                     return (
                       <button 
                         onClick={() => handleJoinSession(session.id, session.channel_name)}
                         className="join-btn active"
                       >
-                        🔴 Rejoin Active Session ({Math.floor((600 - elapsed) / 60)}:{((600 - elapsed) % 60).toString().padStart(2, '0')} left)
+                        🔴 {session.status === 'active' ? 'Rejoin' : 'Join'} Meeting ({remainingMinutes}:{remainingSeconds.toString().padStart(2, '0')} left)
                       </button>
                     );
                   })()
+                )}
+                
+                {session.status === 'accepted' && !session.started_at && (
+                  <button 
+                    onClick={() => handleJoinSession(session.id, session.channel_name)}
+                    className="join-btn primary"
+                  >
+                    <span className="btn-icon">🎥</span>
+                    <span className="btn-text">Join Meeting</span>
+                  </button>
                 )}
               </div>
             </div>
