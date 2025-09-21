@@ -34,7 +34,52 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   ];
 
   useEffect(() => {
-    initializeCall();
+    // Check for existing media streams and clean them up
+    const cleanupExistingStreams = async () => {
+      try {
+        // Get all active media streams
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        const audioDevices = devices.filter(device => device.kind === 'audioinput');
+        
+        console.log(`📹 Available devices: ${videoDevices.length} cameras, ${audioDevices.length} microphones`);
+        
+        if (videoDevices.length === 0) {
+          console.warn('⚠️ No camera devices found');
+        }
+        if (audioDevices.length === 0) {
+          console.warn('⚠️ No microphone devices found');
+        }
+        
+        // Stop any existing streams in other components
+        if (window.activeMediaStreams) {
+          console.log(`🚫 Stopping ${window.activeMediaStreams.length} existing media streams`);
+          window.activeMediaStreams.forEach(stream => {
+            stream.getTracks().forEach(track => {
+              track.stop();
+              console.log(`🚫 Stopped existing ${track.kind} track`);
+            });
+          });
+          window.activeMediaStreams = [];
+        }
+        
+        // Initialize tracking array
+        if (!window.activeMediaStreams) {
+          window.activeMediaStreams = [];
+        }
+        
+        // Wait a bit for devices to be released
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.warn('Could not enumerate devices:', error);
+      }
+    };
+    
+    cleanupExistingStreams().then(() => {
+      initializeCall();
+    });
+    
     return cleanup;
   }, []);
 
@@ -53,25 +98,62 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         localStream.getTracks().forEach(track => track.stop());
       }
       
-      // Get user media with fallback constraints
+      // Get user media with progressive fallback constraints
       let stream;
       try {
+        // Try HD first
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1280, height: 720 },
           audio: { echoCancellation: true, noiseSuppression: true }
         });
+        console.log('✅ HD media access successful');
       } catch (error) {
-        console.warn('HD constraints failed, trying basic:', error);
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
+        console.warn('HD constraints failed, trying standard:', error.message);
+        try {
+          // Try standard quality
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480 },
+            audio: true
+          });
+          console.log('✅ Standard media access successful');
+        } catch (error2) {
+          console.warn('Standard constraints failed, trying basic:', error2.message);
+          try {
+            // Try basic constraints
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true
+            });
+            console.log('✅ Basic media access successful');
+          } catch (error3) {
+            console.error('All video constraints failed:', error3.message);
+            // Try audio only as last resort
+            try {
+              console.log('🎤 Attempting audio-only fallback...');
+              stream = await navigator.mediaDevices.getUserMedia({
+                video: false,
+                audio: true
+              });
+              console.log('✅ Audio-only access successful');
+              alert('Camera access failed, continuing with audio only. Please check if another application is using your camera.');
+            } catch (error4) {
+              console.error('Audio access also failed:', error4.message);
+              throw new Error(`Failed to access any media devices: ${error4.message}`);
+            }
+          }
+        }
       }
       
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
+      
+      // Track this stream globally to prevent conflicts
+      if (!window.activeMediaStreams) {
+        window.activeMediaStreams = [];
+      }
+      window.activeMediaStreams.push(stream);
 
       // Create peer connection
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -125,10 +207,31 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
 
     } catch (error) {
       console.error('❌ Failed to initialize call:', error);
+      let errorMessage = 'Failed to access camera/microphone. ';
+      
       if (error.name === 'NotReadableError') {
-        alert('Camera/microphone is being used by another application. Please close other video apps and try again.');
+        errorMessage = 'Camera/microphone is being used by another application. Please close other video apps (including other browser tabs with video calls) and try again.';
+      } else if (error.name === 'NotAllowedError') {
+        errorMessage = 'Camera/microphone access denied. Please allow permissions and refresh the page.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'No camera/microphone found. Please connect a camera and microphone.';
+      } else if (error.message) {
+        errorMessage += error.message;
       } else {
-        alert('Failed to access camera/microphone. Please check permissions and try again.');
+        errorMessage += 'Please check permissions and try again.';
+      }
+      
+      alert(errorMessage);
+      
+      // Try to continue without media for debugging
+      try {
+        console.log('🔄 Attempting to continue without media for debugging...');
+        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        peerConnectionRef.current = pc;
+        await setupSocket(pc);
+        setupDataChannel(pc);
+      } catch (fallbackError) {
+        console.error('❌ Fallback initialization also failed:', fallbackError);
       }
     }
   };
@@ -221,24 +324,56 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     socket.on('offer', async (data) => {
       console.log(`📨 ${user.role} received offer from user ${data.from} for call ${data.callId}`);
       console.log('Offer details:', { callId: data.callId, from: data.from, myId: user.id, myRole: user.role });
+      console.log('Offer SDP preview:', data.offer?.sdp?.substring(0, 100) + '...');
       
       if (data.callId == callId && data.from !== user.id && user.role === 'mentee') {
         console.log('📨 ✅ Mentee processing offer...');
         try {
+          console.log('📨 PC state before processing:', {
+            signalingState: pc.signalingState,
+            connectionState: pc.connectionState,
+            iceConnectionState: pc.iceConnectionState
+          });
+          
           console.log('📨 Setting remote description...');
           await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          console.log('📨 ✅ Remote description set successfully');
+          
           console.log('📨 Creating answer...');
-          const answer = await pc.createAnswer();
+          const answer = await pc.createAnswer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true
+          });
+          console.log('📨 ✅ Answer created successfully');
+          
           console.log('📨 Setting local description...');
           await pc.setLocalDescription(answer);
+          console.log('📨 ✅ Local description set successfully');
+          
           console.log('📤 Sending answer...');
-          socket.emit('answer', { callId, answer, from: user.id, role: user.role });
-          console.log('✅ Answer sent successfully');
+          console.log('Answer SDP preview:', answer.sdp.substring(0, 100) + '...');
+          socket.emit('answer', { 
+            callId, 
+            answer, 
+            from: user.id, 
+            role: user.role,
+            timestamp: Date.now()
+          });
+          console.log('✅ 📤 ANSWER SENT SUCCESSFULLY TO MENTOR!');
         } catch (error) {
           console.error('❌ Error handling offer:', error);
+          console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+          });
         }
       } else {
-        console.log('📨 ❌ Ignoring offer - not for this mentee or wrong role');
+        console.log('📨 ❌ Ignoring offer - conditions not met:', {
+          callIdMatch: data.callId == callId,
+          notFromSelf: data.from !== user.id,
+          isMentee: user.role === 'mentee'
+        });
       }
     });
 
@@ -292,13 +427,23 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     if (user.role === 'mentor') {
       console.log('📤 Mentor will create offer after room confirmation...');
       
+      let offerSent = false;
+      
       // Wait for room join confirmation, then create offer
-      socket.on('room_joined', () => {
+      const createOfferHandler = async () => {
+        if (offerSent) {
+          console.log('📤 Offer already sent, skipping...');
+          return;
+        }
+        
         setTimeout(async () => {
           try {
             console.log('📤 🚀 MENTOR CREATING OFFER NOW...');
-            console.log('PC signaling state before offer:', pc.signalingState);
-            console.log('PC connection state before offer:', pc.connectionState);
+            console.log('PC state before offer:', {
+              signalingState: pc.signalingState,
+              connectionState: pc.connectionState,
+              iceConnectionState: pc.iceConnectionState
+            });
             
             const offer = await pc.createOffer({
               offerToReceiveAudio: true,
@@ -307,8 +452,9 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             
             console.log('📤 Offer created, setting local description...');
             await pc.setLocalDescription(offer);
+            console.log('📤 ✅ Local description set successfully');
             
-            console.log('📤 Local description set, sending offer...');
+            console.log('📤 Sending offer to mentee...');
             console.log('Offer SDP preview:', offer.sdp.substring(0, 100) + '...');
             
             socket.emit('offer', { 
@@ -319,14 +465,37 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
               timestamp: Date.now()
             });
             
+            offerSent = true;
             console.log('✅ 📤 OFFER SENT SUCCESSFULLY TO MENTEE!');
           } catch (error) {
             console.error('❌ 📤 FAILED TO CREATE/SEND OFFER:', error);
+            console.error('Error details:', {
+              name: error.name,
+              message: error.message,
+              stack: error.stack
+            });
           }
         }, 2000); // 2 second delay after room join
+      };
+      
+      socket.on('room_joined', createOfferHandler);
+      
+      // Also try when participant joins (backup)
+      socket.on('participant_joined', (data) => {
+        if (data.participantCount >= 2) {
+          console.log('📤 Participant joined, mentor will create offer...');
+          createOfferHandler();
+        }
       });
     } else {
       console.log('📨 Mentee waiting for offer from mentor...');
+      
+      // Add timeout for mentee if no offer received
+      setTimeout(() => {
+        if (pc.signalingState === 'stable' && !remoteStream) {
+          console.log('⚠️ No offer received after 10 seconds, mentee may need to refresh');
+        }
+      }, 10000);
     }
   };
 
@@ -512,7 +681,18 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     }
     
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+      localStream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`🚫 Stopped ${track.kind} track`);
+      });
+      
+      // Remove from global tracking
+      if (window.activeMediaStreams) {
+        const index = window.activeMediaStreams.indexOf(localStream);
+        if (index > -1) {
+          window.activeMediaStreams.splice(index, 1);
+        }
+      }
     }
     
     if (peerConnectionRef.current) {
@@ -542,6 +722,11 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
               <div className="connection-status">
                 Status: {connectionState}
               </div>
+              <div className="debug-info" style={{ fontSize: '12px', marginTop: '10px', opacity: 0.7 }}>
+                Role: {user.role} | Call: {callId}
+                {user.role === 'mentee' && <div>Waiting for mentor's offer...</div>}
+                {user.role === 'mentor' && <div>Offer sent, waiting for answer...</div>}
+              </div>
             </div>
           )}
         </div>
@@ -556,6 +741,9 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           <span className={timeLeft < 60 ? 'warning' : ''}>
             {formatTime(timeLeft)}
           </span>
+          <div style={{ fontSize: '10px', opacity: 0.6 }}>
+            {user.role} | {connectionState}
+          </div>
         </div>
 
         <div className="control-buttons">
@@ -597,8 +785,17 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         <div className="chat-header">
           <h4>Chat</h4>
           <span className="connection-indicator">
-            {isConnected ? '🟢 Connected' : '🔴 Connecting...'}
+            {isConnected ? '🟢 Connected' : connectionState === 'connecting' ? '🟡 Connecting...' : connectionState === 'failed' ? '🔴 Failed' : '🟡 Waiting...'}
           </span>
+          {connectionState === 'failed' && (
+            <button 
+              onClick={() => window.location.reload()} 
+              className="retry-btn"
+              style={{ marginLeft: '10px', padding: '2px 8px', fontSize: '12px' }}
+            >
+              Retry
+            </button>
+          )}
         </div>
         
         <div className="chat-messages">

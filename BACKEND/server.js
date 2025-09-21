@@ -1819,32 +1819,93 @@ app.post('/api/webrtc/session/:callId/event', async (req, res) => {
 
 app.post('/api/video-call/request', async (req, res) => {
   try {
+    console.log('📞 CALL REQUEST RECEIVED:', req.body);
     const { menteeId, mentorId, channelName } = req.body;
     
+    if (!menteeId || !mentorId) {
+      console.error('❌ Missing required fields:', { menteeId, mentorId });
+      return res.status(400).json({ error: 'Missing menteeId or mentorId' });
+    }
+    
     // Create call session with current server time
+    console.log('📝 Creating call session in database...');
     const result = await pool.query(
       'INSERT INTO video_calls (mentee_id, mentor_id, channel_name, status, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [menteeId, mentorId, channelName || `call_${Date.now()}`, 'pending', new Date().toISOString()]
     );
     
     const callSession = result.rows[0];
+    console.log('✅ Call session created:', callSession.id);
     
     // Get mentor and mentee details
+    console.log('👥 Fetching user details...');
     const mentee = await pool.query('SELECT username FROM users WHERE id = $1', [menteeId]);
     const mentor = await pool.query('SELECT username FROM users WHERE id = $1', [mentorId]);
     
+    if (mentee.rows.length === 0) {
+      console.error('❌ Mentee not found:', menteeId);
+      return res.status(404).json({ error: 'Mentee not found' });
+    }
+    if (mentor.rows.length === 0) {
+      console.error('❌ Mentor not found:', mentorId);
+      return res.status(404).json({ error: 'Mentor not found' });
+    }
+    
+    console.log('👤 Mentee:', mentee.rows[0].username, '→ 👨‍🏫 Mentor:', mentor.rows[0].username);
+    
     // Create notification for mentor
+    console.log('📝 Creating database notification...');
     await pool.query(
       'INSERT INTO notifications (user_id, type, title, message, related_id, related_type) VALUES ($1, $2, $3, $4, $5, $6)',
       [mentorId, 'call_request', 'Video Call Request', `${mentee.rows[0].username} wants to start a video call with you`, callSession.id, 'video_call']
     );
+    console.log('✅ Database notification created');
     
-    // Real-time notification removed for Vercel compatibility
+    // Check socket.io status
+    console.log('🔌 Socket.IO status:', {
+      available: !!io,
+      connectedSockets: io ? io.sockets.sockets.size : 0,
+      rooms: io ? Array.from(io.sockets.adapter.rooms.keys()) : []
+    });
+    
+    // Check if mentor is in room
+    const mentorRoom = `user_${mentorId}`;
+    const roomExists = io ? io.sockets.adapter.rooms.has(mentorRoom) : false;
+    const roomSize = io ? (io.sockets.adapter.rooms.get(mentorRoom)?.size || 0) : 0;
+    
+    console.log(`🏠 Mentor room ${mentorRoom}:`, {
+      exists: roomExists,
+      size: roomSize,
+      allRooms: io ? Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user_')) : []
+    });
+    
+    // Send real-time notification to mentor
+    console.log(`📞 Sending call_request to mentor ${mentorId} in room ${mentorRoom}`);
+    if (io) {
+      const eventData = {
+        callId: callSession.id,
+        menteeId,
+        menteeName: mentee.rows[0].username,
+        channelName: callSession.channel_name,
+        message: `${mentee.rows[0].username} wants to start a video call with you`
+      };
+      console.log('📤 Event data:', eventData);
+      
+      io.to(mentorRoom).emit('call_request', eventData);
+      console.log(`✅ Call request notification sent to mentor ${mentorId}`);
+      
+      // Also emit to all connected sockets as backup
+      io.emit('global_call_request', { ...eventData, targetMentorId: mentorId });
+      console.log('📡 Global backup notification sent');
+    } else {
+      console.error('❌ Socket.IO not available for real-time notification');
+    }
     
     res.json({ callId: callSession.id, message: 'Call request sent' });
   } catch (error) {
-    console.error('Call request error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('❌ Call request error:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Server error: ' + error.message });
   }
 });
 
@@ -1887,12 +1948,17 @@ app.post('/api/video-call/:callId/accept', async (req, res) => {
       );
     }
     
-    // Notify via socket if available
+    // Send real-time notification to mentee
+    console.log(`✅ Sending call_accepted to mentee ${call.rows[0].mentee_id} in room user_${call.rows[0].mentee_id}`);
     if (io) {
       io.to(`user_${call.rows[0].mentee_id}`).emit('call_accepted', {
         callId,
+        channelName: call.rows[0].channel_name,
         message: 'Your call has been accepted'
       });
+      console.log(`✅ Call accepted notification sent to mentee ${call.rows[0].mentee_id}`);
+    } else {
+      console.error('❌ Socket.IO not available for real-time notification');
     }
     
     res.json({ 
@@ -1924,7 +1990,15 @@ app.post('/api/video-call/:callId/reject', async (req, res) => {
     );
     
     if (call.rows.length > 0) {
-      // Real-time notification removed for Vercel compatibility
+      // Send real-time notification to mentee
+      console.log(`❌ Sending call_rejected to mentee ${call.rows[0].mentee_id}`);
+      if (io) {
+        io.to(`user_${call.rows[0].mentee_id}`).emit('call_rejected', {
+          callId,
+          message: 'Your call was rejected by the mentor'
+        });
+        console.log(`❌ Call rejected notification sent to mentee ${call.rows[0].mentee_id}`);
+      }
     }
     
     res.json({ message: 'Call rejected' });
@@ -2094,8 +2168,11 @@ io.on('connection', (socket) => {
   console.log(`[${new Date().toLocaleTimeString()}] Socket connected: ${socket.id}`);
   
   socket.on('join_user_room', (userId) => {
-    socket.join(`user_${userId}`);
-    console.log(`[${new Date().toLocaleTimeString()}] 🏠 User ${userId} joined room: user_${userId}`);
+    const roomName = `user_${userId}`;
+    socket.join(roomName);
+    const roomSize = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+    console.log(`[${new Date().toLocaleTimeString()}] 🏠 User ${userId} joined room: ${roomName} (${roomSize} members)`);
+    console.log(`📋 All user rooms:`, Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user_')));
   });
   
   socket.on('join_call', (callId) => {
@@ -2192,6 +2269,8 @@ io.on('connection', (socket) => {
   
   socket.on('disconnect', () => {
     console.log(`[${new Date().toLocaleTimeString()}] Socket disconnected: ${socket.id}`);
+    console.log(`📋 Remaining connections: ${io.sockets.sockets.size}`);
+    console.log(`📋 Active rooms:`, Array.from(io.sockets.adapter.rooms.keys()));
   });
 });
 

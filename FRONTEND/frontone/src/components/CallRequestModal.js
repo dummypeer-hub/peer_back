@@ -11,22 +11,24 @@ const CallRequestModal = ({ user, onCallStart, onClose }) => {
   useEffect(() => {
     if (!user || !user.id || user.role === 'mentor') return;
     
-    const socketConnection = io('https://peerversefinal-production.up.railway.app');
+    console.log('CallRequestModal connecting to socket:', config.SOCKET_URL);
+    const socketConnection = io(config.SOCKET_URL);
     setSocket(socketConnection);
     
     socketConnection.emit('join_user_room', user.id);
     
     socketConnection.on('call_request', (data) => {
-      console.log('Incoming call request:', data);
+      console.log('📞 Mentee received incoming call request:', data);
       setIncomingCall(data);
     });
     
     socketConnection.on('call_accepted', (data) => {
-      console.log('Call accepted:', data);
+      console.log('✅ Call accepted by mentor:', data);
       onCallStart(data.callId, data.channelName);
     });
     
     socketConnection.on('call_rejected', () => {
+      console.log('❌ Call rejected by mentor');
       setIncomingCall(null);
       alert('Call was rejected by the mentor');
     });

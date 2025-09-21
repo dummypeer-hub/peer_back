@@ -412,20 +412,33 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
 
   const handleCall = async (mentorId) => {
     try {
-      console.log('Initiating call to mentor:', mentorId);
-      const channelName = `call_${Date.now()}_${user.id}_${mentorId}`;
+      console.log('📞 Initiating call to mentor:', mentorId);
+      console.log('👤 Mentee details:', { id: user.id, username: user.username, role: user.role });
       
-      const response = await axios.post(`${config.API_BASE_URL}/video-call/request`, {
+      const channelName = `call_${Date.now()}_${user.id}_${mentorId}`;
+      console.log('📺 Channel name:', channelName);
+      
+      const requestData = {
         menteeId: user.id,
         mentorId,
         channelName
-      });
+      };
+      console.log('📤 Sending request:', requestData);
+      console.log('🌐 API URL:', `${config.API_BASE_URL}/video-call/request`);
       
-      console.log('Call request response:', response.data);
+      const response = await axios.post(`${config.API_BASE_URL}/video-call/request`, requestData);
+      
+      console.log('✅ Call request response:', response.data);
+      console.log('🎉 Call request sent successfully!');
       alert('Call request sent to mentor. Check Sessions tab to join when accepted.');
     } catch (error) {
-      console.error('Failed to initiate call:', error);
-      alert('Failed to initiate call. Please try again.');
+      console.error('❌ Failed to initiate call:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      alert(`Failed to initiate call: ${error.response?.data?.error || error.message}`);
     }
   };
 

@@ -1,8 +1,8 @@
 /* Mentor Dashboard Specific Logo Styles */
 .mentor-dashboard .sidebar-header .dashboard-logo {
-  height: 120px;
+  height: 150px;
   width: auto;
-  max-width: 400px;
+  max-width: 550px;
   min-width: 300px;
   object-fit: contain;
   padding: 10px;

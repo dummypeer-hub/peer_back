@@ -10,24 +10,49 @@ const SessionsPanel = ({ user, onJoinSession }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const socketConnection = io('https://peerversefinal-production.up.railway.app');
+    console.log('SessionsPanel connecting to socket:', config.SOCKET_URL);
+    const socketConnection = io(config.SOCKET_URL);
     setSocket(socketConnection);
     
     socketConnection.emit('join_user_room', user.id);
     
     if (user.role === 'mentor') {
       socketConnection.on('call_request', (data) => {
+        console.log('📞 Mentor received call_request:', data);
+        console.log('🔄 Refreshing sessions after call request...');
         loadSessions();
+      });
+      
+      socketConnection.on('global_call_request', (data) => {
+        if (data.targetMentorId === user.id) {
+          console.log('📡 Mentor received global_call_request:', data);
+          console.log('🔄 Refreshing sessions after global call request...');
+          loadSessions();
+        }
       });
     } else {
       socketConnection.on('call_accepted', (data) => {
+        console.log('✅ Mentee received call_accepted:', data);
         loadSessions();
       });
       
       socketConnection.on('call_rejected', () => {
+        console.log('❌ Mentee received call_rejected');
         loadSessions();
       });
     }
+    
+    socketConnection.on('connect', () => {
+      console.log(`✅ ${user.role} socket connected, joining room user_${user.id}`);
+    });
+    
+    socketConnection.on('disconnect', () => {
+      console.log(`❌ ${user.role} socket disconnected`);
+    });
+    
+    socketConnection.on('connect_error', (error) => {
+      console.error(`❌ ${user.role} socket connection error:`, error);
+    });
     
     return () => {
       socketConnection.disconnect();
