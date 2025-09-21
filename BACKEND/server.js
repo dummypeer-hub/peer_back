@@ -2203,8 +2203,18 @@ io.on('connection', (socket) => {
   // WebRTC signaling events with detailed logging
   socket.on('offer', (data) => {
     const roomSize = io.sockets.adapter.rooms.get(`call_${data.callId}`)?.size || 0;
-    console.log(`📤 Relaying OFFER from ${data.role} (${data.from}) for call ${data.callId} to ${roomSize-1} other participants`);
+    const roomMembers = Array.from(io.sockets.adapter.rooms.get(`call_${data.callId}`) || []);
+    console.log(`📤 Relaying OFFER from ${data.role} (${data.from}) for call ${data.callId}`);
+    console.log(`🏠 Room call_${data.callId}: ${roomSize} members:`, roomMembers);
+    console.log(`📦 Offer data:`, { callId: data.callId, from: data.from, role: data.role, hasOffer: !!data.offer });
+    
+    // Send to room
     socket.to(`call_${data.callId}`).emit('offer', data);
+    console.log(`✅ Offer relayed to ${roomSize-1} other participants in room`);
+    
+    // Also broadcast to all sockets as backup
+    socket.broadcast.emit('global_offer', data);
+    console.log(`📡 Global offer backup sent`);
   });
   
   socket.on('answer', (data) => {

@@ -376,6 +376,16 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         });
       }
     });
+    
+    // Backup global offer handler
+    socket.on('global_offer', async (data) => {
+      console.log(`📡 ${user.role} received GLOBAL offer from user ${data.from} for call ${data.callId}`);
+      if (data.callId == callId && data.from !== user.id && user.role === 'mentee') {
+        console.log('📡 ✅ Processing global offer as backup...');
+        // Reuse the same processing logic
+        socket.emit('offer', data);
+      }
+    });
 
     socket.on('answer', async (data) => {
       console.log(`📨 ${user.role} received answer from user ${data.from} for call ${data.callId}`);
