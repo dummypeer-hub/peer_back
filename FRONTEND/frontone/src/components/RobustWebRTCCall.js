@@ -621,27 +621,26 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         });
         
         const videoTrack = screenStream.getVideoTracks()[0];
-        const audioTrack = screenStream.getAudioTracks()[0];
         
-        // Replace video track
+        // Replace video track for remote peer
         const videoSender = peerConnectionRef.current.getSenders().find(s => 
           s.track && s.track.kind === 'video'
         );
         if (videoSender) {
           console.log('🔄 Replacing video track with screen share');
           await videoSender.replaceTrack(videoTrack);
-        }
-        
-        // Add audio track if available
-        if (audioTrack) {
-          console.log('🔄 Adding screen share audio');
-          peerConnectionRef.current.addTrack(audioTrack, screenStream);
+        } else {
+          // Add new track if no sender exists
+          peerConnectionRef.current.addTrack(videoTrack, screenStream);
         }
         
         // Update local video to show screen share
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
+        
+        // Store original stream for restoration
+        window.originalStream = localStream;
         
         videoTrack.onended = () => stopScreenShare();
         setIsScreenSharing(true);
@@ -656,8 +655,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
 
   const stopScreenShare = async () => {
     console.log('🚫 Stopping screen share...');
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    const originalStream = window.originalStream || localStream;
+    
+    if (originalStream) {
+      const videoTrack = originalStream.getVideoTracks()[0];
       const videoSender = peerConnectionRef.current.getSenders().find(s => 
         s.track && s.track.kind === 'video'
       );
@@ -667,19 +668,12 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         await videoSender.replaceTrack(videoTrack);
       }
       
-      // Remove screen share audio tracks
-      const senders = peerConnectionRef.current.getSenders();
-      senders.forEach(sender => {
-        if (sender.track && sender.track.label.includes('screen')) {
-          peerConnectionRef.current.removeTrack(sender);
-        }
-      });
-      
       // Restore local video to show camera
       if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.srcObject = originalStream;
       }
     }
+    
     setIsScreenSharing(false);
     console.log('✅ Screen share stopped');
   };

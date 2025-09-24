@@ -57,8 +57,7 @@ const BlogSection = ({ user, userRole }) => {
   const loadLikedBlogs = async () => {
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '${config.API_BASE_URL}' : '${config.API_BASE_URL}';
-      const response = await axios.get(`${apiBase}/api/mentee/${user.id}/liked-blogs`, {
+      const response = await axios.get(`${config.API_BASE_URL}/mentee/${user.id}/liked-blogs`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setLikedBlogs(response.data.likedBlogs || []);
@@ -72,8 +71,7 @@ const BlogSection = ({ user, userRole }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      const response = await axios.post(`${apiBase}/api/blogs/${blogId}/like`, {
+      const response = await axios.post(`${config.API_BASE_URL}/blogs/${blogId}/like`, {
         menteeId: user.id
       }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -98,10 +96,11 @@ const BlogSection = ({ user, userRole }) => {
   const loadComments = async (blogId) => {
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      const response = await axios.get(`${apiBase}/api/blogs/${blogId}/comments`, {
+      console.log('Loading comments for blog:', blogId);
+      const response = await axios.get(`${config.API_BASE_URL}/blogs/${blogId}/comments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Comments response:', response.data);
       setComments(response.data.comments || []);
     } catch (error) {
       console.error('Failed to load comments:', error);
@@ -113,13 +112,14 @@ const BlogSection = ({ user, userRole }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      await axios.post(`${apiBase}/api/blogs/${selectedBlog.id}/comments`, {
+      console.log('Adding comment:', { blogId: selectedBlog.id, userId: user.id, content: newComment });
+      const response = await axios.post(`${config.API_BASE_URL}/blogs/${selectedBlog.id}/comments`, {
         userId: user.id,
         content: newComment
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Comment added:', response.data);
       
       setNewComment('');
       loadComments(selectedBlog.id);
@@ -141,14 +141,15 @@ const BlogSection = ({ user, userRole }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      await axios.post(`${apiBase}/api/blogs/${selectedBlog.id}/comments`, {
+      console.log('Adding reply:', { blogId: selectedBlog.id, userId: user.id, content: replyText, parentCommentId });
+      const response = await axios.post(`${config.API_BASE_URL}/blogs/${selectedBlog.id}/comments`, {
         userId: user.id,
         content: replyText,
         parentCommentId
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Reply added:', response.data);
       
       setReplyText('');
       setReplyingTo(null);
@@ -169,8 +170,7 @@ const BlogSection = ({ user, userRole }) => {
   const handleDeleteComment = async (commentId) => {
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      await axios.delete(`${apiBase}/api/comments/${commentId}`, {
+      await axios.delete(`${config.API_BASE_URL}/comments/${commentId}`, {
         data: { userId: user.id, userRole },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -299,7 +299,12 @@ const BlogSection = ({ user, userRole }) => {
               </div>
 
               <div className="comments-list">
-                {comments.filter(comment => !comment.parent_comment_id).map(comment => (
+                {comments.length === 0 ? (
+                  <div className="no-comments">
+                    <p>💬 No comments yet. Be the first to comment!</p>
+                  </div>
+                ) : (
+                  comments.filter(comment => !comment.parent_comment_id).map(comment => (
                   <div key={comment.id} className="comment">
                     <div className="comment-header">
                       <img 
@@ -322,14 +327,12 @@ const BlogSection = ({ user, userRole }) => {
                     </div>
                     <p className="comment-content">{comment.content}</p>
                     
-                    {userRole === 'mentor' && selectedBlog.mentor_id === user.id && (
-                      <button 
-                        className="reply-btn"
-                        onClick={() => setReplyingTo(comment.id)}
-                      >
-                        💬 Reply
-                      </button>
-                    )}
+                    <button 
+                      className="reply-btn"
+                      onClick={() => setReplyingTo(comment.id)}
+                    >
+                      💬 Reply
+                    </button>
                     
                     {replyingTo === comment.id && (
                       <div className="reply-form">
@@ -374,7 +377,8 @@ const BlogSection = ({ user, userRole }) => {
                       ))}
                     </div>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
