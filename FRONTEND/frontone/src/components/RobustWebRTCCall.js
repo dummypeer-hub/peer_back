@@ -26,10 +26,17 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
     {
       urls: 'turn:turn.cloudflare.com:3478',
       username: 'ccb11479d57e58d6450a4743bad9a1e8',
       credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
+    },
+    {
+      urls: 'turn:relay1.expressturn.com:3478',
+      username: 'ef3CQZAC2XTQOM0K',
+      credential: 'Hj8pDKpz2u4aOqiG'
     }
   ];
 
@@ -84,10 +91,38 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   }, []);
 
   useEffect(() => {
-    if (isConnected && !timerRef.current) {
-      startTimer();
+    // Get session start time from backend to sync timer
+    const syncTimer = async () => {
+      try {
+        const response = await axios.get(`${config.API_BASE_URL}/video-call/${callId}/status`);
+        const call = response.data.call;
+        
+        if (call && call.started_at) {
+          const startTime = new Date(call.started_at);
+          const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+          const remaining = Math.max(0, 600 - elapsed);
+          
+          console.log('⏱️ Syncing timer:', { elapsed, remaining });
+          setTimeLeft(remaining);
+          
+          if (remaining > 0 && !timerRef.current) {
+            startTimer();
+          }
+        } else if (isConnected && !timerRef.current) {
+          startTimer();
+        }
+      } catch (error) {
+        console.error('Failed to sync timer:', error);
+        if (isConnected && !timerRef.current) {
+          startTimer();
+        }
+      }
+    };
+    
+    if (isConnected) {
+      syncTimer();
     }
-  }, [isConnected]);
+  }, [isConnected, callId]);
 
   const initializeCall = async () => {
     try {
@@ -875,9 +910,9 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         </div>
       </div>
 
-      <div className="chat-panel">
+      <div className="chat-panel" style={{ display: 'flex' }}>
         <div className="chat-header">
-          <h4>Chat</h4>
+          <h4>💬 Chat</h4>
           <span className="connection-indicator">
             {isConnected ? '🟢 Connected' : connectionState === 'connecting' ? '🟡 Connecting...' : connectionState === 'failed' ? '🔴 Failed' : '🟡 Waiting...'}
           </span>
