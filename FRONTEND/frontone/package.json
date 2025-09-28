@@ -1,5 +1,5 @@
 {
-  "name": "frontone",
+  "name": "peerverse-frontend",
   "version": "0.1.0",
   "private": true,
   "homepage": ".",
@@ -13,6 +13,7 @@
     "axios": "^1.12.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-helmet-async": "^2.0.5",
     "react-router-dom": "^6.30.1",
     "react-scripts": "^5.0.1",
     "socket.io-client": "^4.8.1",

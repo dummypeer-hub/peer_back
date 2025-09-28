@@ -431,6 +431,8 @@
               -2px 0 15px rgba(0, 0, 0, 0.2);
   min-width: 320px;
   z-index: 3;
+  visibility: visible;
+  opacity: 1;
 }
 
 @media (max-width: 768px) {
@@ -640,4 +642,19 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+.no-messages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+  text-align: center;
+}
+
+.no-messages p {
+  margin: 0;
+  font-size: 16px;
 }

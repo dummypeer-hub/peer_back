@@ -27,16 +27,28 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
     {
-      urls: 'turn:turn.cloudflare.com:3478',
+      urls: ['turn:turn.cloudflare.com:3478', 'turn:turn.cloudflare.com:3478?transport=tcp'],
       username: 'ccb11479d57e58d6450a4743bad9a1e8',
       credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
     },
     {
-      urls: 'turn:relay1.expressturn.com:3478',
+      urls: ['turn:relay1.expressturn.com:3478', 'turn:relay1.expressturn.com:3478?transport=tcp'],
       username: 'ef3CQZAC2XTQOM0K',
       credential: 'Hj8pDKpz2u4aOqiG'
+    },
+    {
+      urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: ['turn:openrelay.metered.ca:80?transport=tcp', 'turn:openrelay.metered.ca:443?transport=tcp'],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     }
   ];
 
@@ -190,8 +202,14 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       }
       window.activeMediaStreams.push(stream);
 
-      // Create peer connection
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      // Create peer connection with enhanced configuration for different networks
+      const pc = new RTCPeerConnection({ 
+        iceServers: ICE_SERVERS,
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
+      });
       peerConnectionRef.current = pc;
 
       // Add tracks with labels
@@ -210,7 +228,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         }
       };
 
-      // Connection state monitoring with detailed logging
+      // Connection state monitoring with detailed logging and recovery
       pc.onconnectionstatechange = () => {
         console.log(`🔗 ${user.role} Connection state changed:`, pc.connectionState);
         setConnectionState(pc.connectionState);
@@ -221,9 +239,26 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         } else if (pc.connectionState === 'failed') {
           console.error(`❌ ${user.role} WebRTC connection FAILED`);
           setIsConnected(false);
+          
+          // Attempt connection recovery
+          console.log('🔄 Attempting connection recovery...');
+          setTimeout(() => {
+            if (pc.connectionState === 'failed') {
+              console.log('🔄 Restarting ICE...');
+              pc.restartIce();
+            }
+          }, 2000);
         } else if (pc.connectionState === 'disconnected') {
           console.log(`🔌 ${user.role} WebRTC disconnected`);
           setIsConnected(false);
+          
+          // Try to reconnect after brief disconnection
+          setTimeout(() => {
+            if (pc.connectionState === 'disconnected') {
+              console.log('🔄 Attempting reconnection...');
+              pc.restartIce();
+            }
+          }, 3000);
         }
       };
 
@@ -234,6 +269,24 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           console.log(`✅ ${user.role} ICE connection established!`);
         } else if (pc.iceConnectionState === 'failed') {
           console.error(`❌ ${user.role} ICE connection failed!`);
+          
+          // Restart ICE for failed connections
+          console.log('🔄 ICE failed, restarting ICE gathering...');
+          setTimeout(() => {
+            if (pc.iceConnectionState === 'failed') {
+              pc.restartIce();
+            }
+          }, 1000);
+        } else if (pc.iceConnectionState === 'disconnected') {
+          console.log(`🔌 ${user.role} ICE disconnected, waiting for reconnection...`);
+          
+          // Give some time for automatic reconnection
+          setTimeout(() => {
+            if (pc.iceConnectionState === 'disconnected') {
+              console.log('🔄 ICE still disconnected, restarting...');
+              pc.restartIce();
+            }
+          }, 5000);
         }
       };
 
@@ -317,16 +370,34 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const setupSignaling = (pc, socket) => {
     console.log(`🔌 Setting up signaling for ${user.role} in call ${callId}`);
     
-    // ICE candidates with detailed logging
+    // ICE candidates with detailed logging and retry mechanism
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log(`🧊 ${user.role} sending ICE candidate:`, event.candidate.type);
-        socket.emit('ice_candidate', {
-          callId,
-          candidate: event.candidate,
-          from: user.id,
-          role: user.role
+        console.log(`🧊 ${user.role} sending ICE candidate:`, {
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+          port: event.candidate.port
         });
+        
+        // Send ICE candidate with retry
+        const sendCandidate = () => {
+          socket.emit('ice_candidate', {
+            callId,
+            candidate: event.candidate,
+            from: user.id,
+            role: user.role,
+            timestamp: Date.now()
+          });
+        };
+        
+        sendCandidate();
+        
+        // Retry sending important candidates (relay/turn)
+        if (event.candidate.type === 'relay' || event.candidate.protocol === 'tcp') {
+          setTimeout(sendCandidate, 1000);
+          setTimeout(sendCandidate, 3000);
+        }
       } else {
         console.log(`🧊 ${user.role} ICE gathering complete`);
       }
@@ -444,13 +515,32 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     });
 
     socket.on('ice_candidate', async (data) => {
-      console.log(`🧊 ${user.role} received ICE candidate from ${data.role} (user ${data.from})`);
+      console.log(`🧊 ${user.role} received ICE candidate from ${data.role} (user ${data.from}):`, {
+        type: data.candidate?.type,
+        protocol: data.candidate?.protocol
+      });
+      
       if (data.callId == callId && data.from !== user.id) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log(`✅ ICE candidate added successfully`);
+          // Add ICE candidate with retry for failed attempts
+          const addCandidate = async (retryCount = 0) => {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+              console.log(`✅ ICE candidate added successfully (attempt ${retryCount + 1})`);
+            } catch (error) {
+              console.error(`❌ ICE candidate error (attempt ${retryCount + 1}):`, error.message);
+              
+              // Retry for important candidates
+              if (retryCount < 2 && (data.candidate.type === 'relay' || data.candidate.protocol === 'tcp')) {
+                console.log(`🔄 Retrying ICE candidate in ${(retryCount + 1) * 1000}ms...`);
+                setTimeout(() => addCandidate(retryCount + 1), (retryCount + 1) * 1000);
+              }
+            }
+          };
+          
+          await addCandidate();
         } catch (error) {
-          console.error('❌ ICE candidate error:', error);
+          console.error('❌ ICE candidate processing error:', error);
         }
       }
     });
@@ -910,7 +1000,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         </div>
       </div>
 
-      <div className="chat-panel" style={{ display: 'flex' }}>
+      <div className="chat-panel">
         <div className="chat-header">
           <h4>💬 Chat</h4>
           <span className="connection-indicator">
@@ -927,10 +1017,15 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         </div>
         
         <div className="chat-messages">
+          {messages.length === 0 && (
+            <div className="no-messages">
+              <p>💬 Start a conversation!</p>
+            </div>
+          )}
           {messages.map((msg, index) => (
             <div key={index} className={`chat-message ${msg.from === user.id ? 'own-message' : 'other-message'}`}>
               <div className="message-header">
-                <span className="sender">{msg.sender}</span>
+                <span className="sender">{msg.sender || 'Anonymous'}</span>
                 <span className="time">{msg.timestamp}</span>
               </div>
               <div className="message-text">{msg.text}</div>

@@ -8,7 +8,13 @@ const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
 app.use(cors({
-  origin: true,
+  origin: [
+    'https://www.peerverse.in',
+    'https://peerverse.in', 
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
   credentials: true
 }));
 app.use(express.json());
@@ -16,14 +22,14 @@ app.use(express.json());
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ 
-    message: 'PeerSync Backend is running on Vercel!',
+    message: 'PeerVerse Backend is running on Vercel!',
     timestamp: new Date().toISOString()
   });
 });
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', service: 'PeerSync API' });
+  res.json({ status: 'OK', service: 'PeerVerse API' });
 });
 
 // Basic auth endpoints (simplified for deployment)

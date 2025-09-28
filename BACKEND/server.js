@@ -18,7 +18,13 @@ app.set('trust proxy', 1); // Trust Railway proxy
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['https://peerverse-final.vercel.app', 'http://localhost:3000', 'http://localhost:3001'],
+    origin: [
+      'https://www.peerverse.in',
+      'https://peerverse.in',
+      'https://peerverse-final.vercel.app', 
+      'http://localhost:3000', 
+      'http://localhost:3001'
+    ],
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -158,7 +164,13 @@ const limiter = rateLimit({
 });
 
 app.use(cors({
-  origin: ['https://peerverse-final.vercel.app', 'http://localhost:3000', 'http://localhost:3001'],
+  origin: [
+    'https://www.peerverse.in',
+    'https://peerverse.in',
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -171,7 +183,7 @@ app.use('/api/verify-signup', limiter);
 
 // Test endpoint
 app.get('/api/test', (req, res) => {
-  res.json({ message: 'PeerSync Backend is running!' });
+  res.json({ message: 'PeerVerse Backend is running!' });
 });
 
 // Generate OTP
@@ -179,14 +191,28 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 
 // Send OTP email
 const sendOTPEmail = async (email, otp, purpose) => {
-  const subject = purpose === 'signup' ? 'PeerSync - Email Verification' : 
-                  purpose === 'login' ? 'PeerSync - Login Verification' : 
-                  'PeerSync - Password Reset';
+  const subject = purpose === 'signup' ? 'PeerVerse - Email Verification' : 
+                  purpose === 'login' ? 'PeerVerse - Login Verification' : 
+                  'PeerVerse - Password Reset';
   
   const html = `
-    <h2>PeerSync ${purpose === 'signup' ? 'Email Verification' : purpose === 'login' ? 'Login Verification' : 'Password Reset'}</h2>
-    <p>Your OTP code is: <strong>${otp}</strong></p>
-    <p>This code will expire in 10 minutes.</p>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+      <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #2563eb; margin: 0; font-size: 28px;">PeerVerse</h1>
+          <p style="color: #666; margin: 5px 0 0 0;">Your Mentorship Platform</p>
+        </div>
+        <h2 style="color: #333; text-align: center; margin-bottom: 20px;">${purpose === 'signup' ? 'Email Verification' : purpose === 'login' ? 'Login Verification' : 'Password Reset'}</h2>
+        <div style="background-color: #f0f7ff; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+          <p style="margin: 0 0 10px 0; color: #333;">Your OTP code is:</p>
+          <div style="font-size: 32px; font-weight: bold; color: #2563eb; letter-spacing: 4px; margin: 10px 0;">${otp}</div>
+        </div>
+        <p style="color: #666; text-align: center; margin: 20px 0;">This code will expire in 10 minutes.</p>
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+          <p style="color: #999; font-size: 14px; margin: 0;">Visit us at <a href="https://www.peerverse.in" style="color: #2563eb;">www.peerverse.in</a></p>
+        </div>
+      </div>
+    </div>
   `;
 
   const request = mailjet.post('send', { version: 'v3.1' }).request({
@@ -194,7 +220,7 @@ const sendOTPEmail = async (email, otp, purpose) => {
       {
         From: {
           Email: process.env.MAILJET_SENDER_EMAIL,
-          Name: 'PeerSync'
+          Name: 'PeerVerse'
         },
         To: [
           {

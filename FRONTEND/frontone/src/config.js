@@ -1,10 +1,14 @@
 const config = {
   API_BASE_URL: process.env.NODE_ENV === 'production' 
-    ? 'https://peerversefinal-production.up.railway.app/api'
-    : 'https://peerversefinal-production.up.railway.app/api',
+    ? (window.location.hostname === 'www.peerverse.in' || window.location.hostname === 'peerverse.in'
+        ? 'https://peerverse-final.vercel.app/api'
+        : 'https://peerverse-final.vercel.app/api')
+    : 'http://localhost:5000/api',
   SOCKET_URL: process.env.NODE_ENV === 'production'
-    ? 'https://peerversefinal-production.up.railway.app'
-    : 'https://peerversefinal-production.up.railway.app'
+    ? (window.location.hostname === 'www.peerverse.in' || window.location.hostname === 'peerverse.in'
+        ? 'https://peerverse-final.vercel.app'
+        : 'https://peerverse-final.vercel.app')
+    : 'http://localhost:5000'
 };
 
 export default config;

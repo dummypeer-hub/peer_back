@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../config';
+import SEO from './SEO';
 import BlogSection from './BlogSection';
 import NotificationPanel from './NotificationPanel';
 import CommunityBrowser from './CommunityBrowser';
@@ -585,7 +586,14 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   }
 
   return (
-    <div className="mentee-dashboard">
+    <>
+      <SEO 
+        title="Mentee Dashboard - PeerVerse"
+        description="Access your personalized mentee dashboard on PeerVerse. Connect with expert mentors, join sessions, read blogs, and accelerate your learning journey."
+        keywords="mentee dashboard, find mentors, video sessions, career guidance, skill development, learning platform, mentorship"
+        url="/dashboard"
+      />
+      <div className="mentee-dashboard">
       {/* Header */}
       <header className="dashboard-header">
         <div className="header-left">
@@ -1138,7 +1146,8 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
         />
       )}
 
-    </div>
+      </div>
+    </>
   );
 };
 
