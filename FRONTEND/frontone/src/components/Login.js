@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import config from '../config';
-import SEO from './SEO';
+
 import './Auth.css';
 
 const Login = ({ onLogin, onSwitchToSignup, onForgotPassword }) => {
@@ -84,14 +84,7 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword }) => {
   }
 
   return (
-    <>
-      <SEO 
-        title="Sign In - PeerVerse"
-        description="Sign in to PeerVerse to connect with expert mentors or start mentoring students. Access your personalized dashboard and continue your learning journey."
-        keywords="sign in, login, PeerVerse, mentorship platform, mentor login, student login, career guidance"
-        url="/login"
-      />
-      <div className="auth-container">
+    <div className="auth-container">
         <div className="auth-card">
           <h1>PeerVerse</h1>
           <h2>Sign In</h2>
@@ -137,8 +130,7 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword }) => {
           </button>
         </div>
         </div>
-      </div>
-    </>
+    </div>
   );
 };
 

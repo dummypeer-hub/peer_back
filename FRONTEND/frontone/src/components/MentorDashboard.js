@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../config';
-import SEO from './SEO';
+
 import MentorProfileEditor from './MentorProfileEditor';
 import BlogSection from './BlogSection';
 import CreateBlog from './CreateBlog';
@@ -393,15 +393,8 @@ const MentorDashboard = ({ user, onLogout }) => {
   };
 
   return (
-    <>
-      <SEO 
-        title="Mentor Dashboard - PeerVerse"
-        description="Access your mentor dashboard on PeerVerse. Manage sessions, create blogs, build communities, and guide students in their learning journey."
-        keywords="mentor dashboard, mentoring platform, create blogs, manage sessions, student guidance, teaching platform"
-        url="/mentor-dashboard"
-      />
-      <div className="mentor-dashboard">
-        <div className="sidebar">
+    <div className="mentor-dashboard">
+      <div className="sidebar">
         <div className="sidebar-header">
           <img src="/finall_logo_verse.png" alt="PeerVerse" className="dashboard-logo" />
         </div>
@@ -479,18 +472,17 @@ const MentorDashboard = ({ user, onLogout }) => {
 
       <div className="main-content">
         {renderContent()}
-        </div>
-
-        <NotificationPanel 
-          user={user}
-          isOpen={showNotifications}
-          onClose={() => {
-            setShowNotifications(false);
-            loadNotifications();
-          }}
-        />
       </div>
-    </>
+
+      <NotificationPanel 
+        user={user}
+        isOpen={showNotifications}
+        onClose={() => {
+          setShowNotifications(false);
+          loadNotifications();
+        }}
+      />
+    </div>
   );
 };
 

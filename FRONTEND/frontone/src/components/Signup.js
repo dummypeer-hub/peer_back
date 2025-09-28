@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import config from '../config';
-import SEO from './SEO';
+
 import './Auth.css';
 
 const Signup = ({ onSignup, onSwitchToLogin }) => {
@@ -85,17 +85,10 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
   // Step 1: Role Selection
   if (step === 1) {
     return (
-      <>
-        <SEO 
-          title="Sign Up - PeerVerse"
-          description="Join PeerVerse as a mentor or mentee. Share your expertise or learn from industry experts. Start your mentorship journey today!"
-          keywords="sign up, register, PeerVerse, mentorship platform, become mentor, find mentor, career guidance, skill development"
-          url="/signup"
-        />
-        <div className="auth-container">
-          <div className="auth-card">
-            <h1>PeerVerse</h1>
-            <h2>Choose Your Role</h2>
+      <div className="auth-container">
+        <div className="auth-card">
+          <h1>PeerVerse</h1>
+          <h2>Choose Your Role</h2>
           <div className="role-selection">
             <div className="role-card" onClick={() => handleRoleSelect('mentor')}>
               <div className="role-emoji">👨‍🏫</div>
@@ -108,12 +101,11 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
               <p>Learn from experienced mentors</p>
             </div>
           </div>
-            <button onClick={onSwitchToLogin} className="link-btn">
-              Already have an account? Sign In
-            </button>
-          </div>
+          <button onClick={onSwitchToLogin} className="link-btn">
+            Already have an account? Sign In
+          </button>
         </div>
-      </>
+      </div>
     );
   }
 

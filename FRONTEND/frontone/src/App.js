@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { HelmetProvider, Helmet } from 'react-helmet-async';
+
 import axios from 'axios';
 import config from './config';
 import Login from './components/Login';
@@ -127,22 +127,14 @@ function App() {
   };
 
   return (
-    <HelmetProvider>
-      <Router>
-        <div className="App">
-          <Helmet>
-            <title>PeerVerse - Connect with Expert Mentors | Online Mentorship Platform</title>
-            <meta name="description" content="Join PeerVerse, India's leading mentorship platform. Connect with expert mentors for career guidance, skill development, interview preparation, and academic support." />
-            <meta name="keywords" content="mentorship platform, online mentoring, career guidance, skill development, interview preparation, academic support, expert mentors, professional development, learning platform, career coaching" />
-            <link rel="canonical" href="https://www.peerverse.in" />
-          </Helmet>
-          <Routes>
-            <Route path="/video-call/:callId" element={<VideoCallPage />} />
-            <Route path="/*" element={renderCurrentView()} />
-          </Routes>
-        </div>
-      </Router>
-    </HelmetProvider>
+    <Router>
+      <div className="App">
+        <Routes>
+          <Route path="/video-call/:callId" element={<VideoCallPage />} />
+          <Route path="/*" element={renderCurrentView()} />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 
