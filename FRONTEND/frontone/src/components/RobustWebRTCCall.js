@@ -24,29 +24,41 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const timerRef = useRef();
 
   const ICE_SERVERS = [
+    // STUN servers for NAT traversal
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
+    
+    // Cloudflare TURN servers (your credentials)
     {
-      urls: ['turn:turn.cloudflare.com:3478', 'turn:turn.cloudflare.com:3478?transport=tcp'],
+      urls: 'turn:turn.cloudflare.com:3478',
       username: 'ccb11479d57e58d6450a4743bad9a1e8',
       credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
     },
     {
-      urls: ['turn:relay1.expressturn.com:3478', 'turn:relay1.expressturn.com:3478?transport=tcp'],
-      username: 'ef3CQZAC2XTQOM0K',
-      credential: 'Hj8pDKpz2u4aOqiG'
+      urls: 'turn:turn.cloudflare.com:3478?transport=tcp',
+      username: 'ccb11479d57e58d6450a4743bad9a1e8',
+      credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
     },
     {
-      urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+      urls: 'turns:turn.cloudflare.com:5349',
+      username: 'ccb11479d57e58d6450a4743bad9a1e8',
+      credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
+    },
+    
+    // Backup free TURN servers
+    {
+      urls: 'turn:openrelay.metered.ca:80',
       username: 'openrelayproject',
       credential: 'openrelayproject'
     },
     {
-      urls: ['turn:openrelay.metered.ca:80?transport=tcp', 'turn:openrelay.metered.ca:443?transport=tcp'],
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
       username: 'openrelayproject',
       credential: 'openrelayproject'
     }
@@ -208,7 +220,8 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         iceCandidatePoolSize: 10,
         iceTransportPolicy: 'all',
         bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require'
+        rtcpMuxPolicy: 'require',
+        iceGatheringTimeout: 10000
       });
       peerConnectionRef.current = pc;
 
@@ -239,26 +252,9 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         } else if (pc.connectionState === 'failed') {
           console.error(`❌ ${user.role} WebRTC connection FAILED`);
           setIsConnected(false);
-          
-          // Attempt connection recovery
-          console.log('🔄 Attempting connection recovery...');
-          setTimeout(() => {
-            if (pc.connectionState === 'failed') {
-              console.log('🔄 Restarting ICE...');
-              pc.restartIce();
-            }
-          }, 2000);
         } else if (pc.connectionState === 'disconnected') {
           console.log(`🔌 ${user.role} WebRTC disconnected`);
           setIsConnected(false);
-          
-          // Try to reconnect after brief disconnection
-          setTimeout(() => {
-            if (pc.connectionState === 'disconnected') {
-              console.log('🔄 Attempting reconnection...');
-              pc.restartIce();
-            }
-          }, 3000);
         }
       };
 
@@ -267,26 +263,30 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           console.log(`✅ ${user.role} ICE connection established!`);
+          
+          // Log which type of connection was established
+          pc.getStats().then(stats => {
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                console.log(`🔗 Connection type: ${report.localCandidateId} -> ${report.remoteCandidateId}`);
+              }
+            });
+          });
         } else if (pc.iceConnectionState === 'failed') {
           console.error(`❌ ${user.role} ICE connection failed!`);
           
-          // Restart ICE for failed connections
-          console.log('🔄 ICE failed, restarting ICE gathering...');
-          setTimeout(() => {
-            if (pc.iceConnectionState === 'failed') {
-              pc.restartIce();
-            }
-          }, 1000);
+          // Diagnose connection failure
+          pc.getStats().then(stats => {
+            let hasRelay = false;
+            stats.forEach(report => {
+              if (report.type === 'local-candidate' && report.candidateType === 'relay') {
+                hasRelay = true;
+              }
+            });
+            console.log(`🔍 TURN servers ${hasRelay ? 'working' : 'FAILED'} - ${hasRelay ? 'Cloudflare TURN accessible' : 'Check Cloudflare TURN credentials'}`);
+          });
         } else if (pc.iceConnectionState === 'disconnected') {
-          console.log(`🔌 ${user.role} ICE disconnected, waiting for reconnection...`);
-          
-          // Give some time for automatic reconnection
-          setTimeout(() => {
-            if (pc.iceConnectionState === 'disconnected') {
-              console.log('🔄 ICE still disconnected, restarting...');
-              pc.restartIce();
-            }
-          }, 5000);
+          console.log(`🔌 ${user.role} ICE disconnected`);
         }
       };
 
@@ -380,23 +380,16 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           port: event.candidate.port
         });
         
-        // Send ICE candidate with retry
-        const sendCandidate = () => {
-          socket.emit('ice_candidate', {
-            callId,
-            candidate: event.candidate,
-            from: user.id,
-            role: user.role,
-            timestamp: Date.now()
-          });
-        };
+        socket.emit('ice_candidate', {
+          callId,
+          candidate: event.candidate,
+          from: user.id,
+          role: user.role
+        });
         
-        sendCandidate();
-        
-        // Retry sending important candidates (relay/turn)
-        if (event.candidate.type === 'relay' || event.candidate.protocol === 'tcp') {
-          setTimeout(sendCandidate, 1000);
-          setTimeout(sendCandidate, 3000);
+        // Log important relay candidates
+        if (event.candidate.type === 'relay') {
+          console.log(`🔥 RELAY candidate found via ${event.candidate.relatedAddress ? 'Cloudflare TURN' : 'Backup TURN'} - cross-network enabled!`);
         }
       } else {
         console.log(`🧊 ${user.role} ICE gathering complete`);
@@ -429,88 +422,66 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       }
     });
 
+    let offerProcessed = false;
+    
     // Handle signaling events with detailed logging
     socket.on('offer', async (data) => {
       console.log(`📨 ${user.role} received offer from user ${data.from} for call ${data.callId}`);
-      console.log('Offer details:', { callId: data.callId, from: data.from, myId: user.id, myRole: user.role });
-      console.log('Offer SDP preview:', data.offer?.sdp?.substring(0, 100) + '...');
       
-      if (data.callId == callId && data.from !== user.id && user.role === 'mentee') {
+      if (data.callId == callId && data.from !== user.id && user.role === 'mentee' && !offerProcessed) {
+        offerProcessed = true;
         console.log('📨 ✅ Mentee processing offer...');
         try {
-          console.log('📨 PC state before processing:', {
-            signalingState: pc.signalingState,
-            connectionState: pc.connectionState,
-            iceConnectionState: pc.iceConnectionState
-          });
+          if (pc.signalingState !== 'stable') {
+            console.log('📨 PC not in stable state, skipping offer');
+            offerProcessed = false;
+            return;
+          }
           
-          console.log('📨 Setting remote description...');
           await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
           console.log('📨 ✅ Remote description set successfully');
           
-          console.log('📨 Creating answer...');
-          const answer = await pc.createAnswer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: true
-          });
-          console.log('📨 ✅ Answer created successfully');
-          
-          console.log('📨 Setting local description...');
+          const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           console.log('📨 ✅ Local description set successfully');
           
-          console.log('📤 Sending answer...');
-          console.log('Answer SDP preview:', answer.sdp.substring(0, 100) + '...');
           socket.emit('answer', { 
             callId, 
             answer, 
             from: user.id, 
-            role: user.role,
-            timestamp: Date.now()
+            role: user.role
           });
           console.log('✅ 📤 ANSWER SENT SUCCESSFULLY TO MENTOR!');
         } catch (error) {
           console.error('❌ Error handling offer:', error);
-          console.error('Error details:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack
-          });
+          offerProcessed = false;
         }
-      } else {
-        console.log('📨 ❌ Ignoring offer - conditions not met:', {
-          callIdMatch: data.callId == callId,
-          notFromSelf: data.from !== user.id,
-          isMentee: user.role === 'mentee'
-        });
       }
     });
     
-    // Backup global offer handler
-    socket.on('global_offer', async (data) => {
-      console.log(`📡 ${user.role} received GLOBAL offer from user ${data.from} for call ${data.callId}`);
-      if (data.callId == callId && data.from !== user.id && user.role === 'mentee') {
-        console.log('📡 ✅ Processing global offer as backup...');
-        // Reuse the same processing logic
-        socket.emit('offer', data);
-      }
-    });
 
+
+    let answerProcessed = false;
+    
     socket.on('answer', async (data) => {
       console.log(`📨 ${user.role} received answer from user ${data.from} for call ${data.callId}`);
-      console.log('Answer details:', { callId: data.callId, from: data.from, myId: user.id, myRole: user.role });
       
-      if (data.callId == callId && data.from !== user.id && user.role === 'mentor') {
+      if (data.callId == callId && data.from !== user.id && user.role === 'mentor' && !answerProcessed) {
+        answerProcessed = true;
         console.log('📨 ✅ Mentor processing answer...');
         try {
-          console.log('📨 Setting remote description from answer...');
+          if (pc.signalingState !== 'have-local-offer') {
+            console.log('📨 PC not in correct state for answer, skipping');
+            answerProcessed = false;
+            return;
+          }
+          
           await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
           console.log('✅ Answer processed successfully - WebRTC connection should establish');
         } catch (error) {
           console.error('❌ Error handling answer:', error);
+          answerProcessed = false;
         }
-      } else {
-        console.log('📨 ❌ Ignoring answer - not for this mentor or wrong role');
       }
     });
 
@@ -522,23 +493,12 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       
       if (data.callId == callId && data.from !== user.id) {
         try {
-          // Add ICE candidate with retry for failed attempts
-          const addCandidate = async (retryCount = 0) => {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-              console.log(`✅ ICE candidate added successfully (attempt ${retryCount + 1})`);
-            } catch (error) {
-              console.error(`❌ ICE candidate error (attempt ${retryCount + 1}):`, error.message);
-              
-              // Retry for important candidates
-              if (retryCount < 2 && (data.candidate.type === 'relay' || data.candidate.protocol === 'tcp')) {
-                console.log(`🔄 Retrying ICE candidate in ${(retryCount + 1) * 1000}ms...`);
-                setTimeout(() => addCandidate(retryCount + 1), (retryCount + 1) * 1000);
-              }
-            }
-          };
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log(`✅ ICE candidate added successfully`);
           
-          await addCandidate();
+          if (data.candidate.type === 'relay') {
+            console.log(`🔥 RELAY candidate added from ${data.role} - Cloudflare TURN working!`);
+          }
         } catch (error) {
           console.error('❌ ICE candidate processing error:', error);
         }
@@ -579,58 +539,45 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         setTimeout(async () => {
           try {
             console.log('📤 🚀 MENTOR CREATING OFFER NOW...');
-            console.log('PC state before offer:', {
-              signalingState: pc.signalingState,
-              connectionState: pc.connectionState,
-              iceConnectionState: pc.iceConnectionState
-            });
+            
+            // Wait for ICE gathering to complete for better connectivity
+            if (pc.iceGatheringState === 'gathering') {
+              console.log('⏳ Waiting for ICE gathering to complete...');
+              await new Promise(resolve => {
+                const checkGathering = () => {
+                  if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                  } else {
+                    setTimeout(checkGathering, 500);
+                  }
+                };
+                checkGathering();
+                // Timeout after 5 seconds
+                setTimeout(resolve, 5000);
+              });
+            }
             
             const offer = await pc.createOffer({
               offerToReceiveAudio: true,
               offerToReceiveVideo: true
             });
             
-            console.log('📤 Offer created, setting local description...');
             await pc.setLocalDescription(offer);
             console.log('📤 ✅ Local description set successfully');
             
-            console.log('📤 Sending offer to mentee...');
-            console.log('Offer SDP preview:', offer.sdp.substring(0, 100) + '...');
-            
-            // Send offer multiple times to ensure delivery
-            const offerData = { 
+            socket.emit('offer', { 
               callId, 
               offer, 
               from: user.id, 
-              role: user.role,
-              timestamp: Date.now()
-            };
-            
-            socket.emit('offer', offerData);
-            
-            // Retry offer sending with connection state check
-            let retryCount = 0;
-            const retryInterval = setInterval(() => {
-              if (retryCount < 3 && pc.connectionState !== 'connected') {
-                console.log(`📤 Retrying offer send (${retryCount + 1}/3)...`);
-                socket.emit('offer', offerData);
-                retryCount++;
-              } else {
-                clearInterval(retryInterval);
-              }
-            }, 1500);
+              role: user.role
+            });
             
             offerSent = true;
             console.log('✅ 📤 OFFER SENT SUCCESSFULLY TO MENTEE!');
           } catch (error) {
             console.error('❌ 📤 FAILED TO CREATE/SEND OFFER:', error);
-            console.error('Error details:', {
-              name: error.name,
-              message: error.message,
-              stack: error.stack
-            });
           }
-        }, 3000); // 3 second delay to wait for mentee
+        }, 2000);
       };
       
       socket.on('room_joined', createOfferHandler);
@@ -644,17 +591,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             if (!offerSent) {
               createOfferHandler();
             } else {
-              // Resend existing offer to new participant
-              console.log('📤 Resending offer to new participant...');
-              if (pc.localDescription) {
-                socket.emit('offer', { 
-                  callId, 
-                  offer: pc.localDescription, 
-                  from: user.id, 
-                  role: user.role,
-                  timestamp: Date.now()
-                });
-              }
+
             }
           }, 1000);
         }
@@ -665,9 +602,11 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       // Add timeout for mentee if no offer received
       setTimeout(() => {
         if (pc.signalingState === 'stable' && !remoteStream) {
-          console.log('⚠️ No offer received after 10 seconds, mentee may need to refresh');
+          console.log('⚠️ No offer received after 15 seconds, checking connection...');
+          console.log('ICE connection state:', pc.iceConnectionState);
+          console.log('Connection state:', pc.connectionState);
         }
-      }, 10000);
+      }, 15000);
     }
   };
 
