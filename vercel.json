@@ -27,5 +27,10 @@
     "BACKEND/api/index.js": {
       "maxDuration": 30
     }
+  },
+  "build": {
+    "env": {
+      "CI": "false"
+    }
   }
 }
