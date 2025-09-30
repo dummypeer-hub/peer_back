@@ -15,7 +15,9 @@ app.use(cors({
     'http://localhost:3000',
     'http://localhost:3001'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
