@@ -13,7 +13,7 @@ const app = express();
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : { rejectUnauthorized: false }
 });
 
 app.use(cors({
@@ -30,6 +30,31 @@ app.options('*', (req, res) => {
 });
 
 app.use(express.json());
+
+// Authentication middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.sendStatus(401);
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
+
+// Safe JSON parse
+const safeJsonParse = (str, fallback = null) => {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    return fallback;
+  }
+};
 
 // Generate OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
@@ -138,7 +163,10 @@ app.post('/api/signup', async (req, res) => {
 app.post('/api/verify-signup', async (req, res) => {
   try {
     const { otp, tempUserId } = req.body;
-    const userData = JSON.parse(Buffer.from(tempUserId, 'base64').toString());
+    const userData = safeJsonParse(Buffer.from(tempUserId, 'base64').toString());
+    if (!userData) {
+      return res.status(400).json({ error: 'Invalid user data' });
+    }
 
     const otpResult = await pool.query(
       'SELECT * FROM otp_codes WHERE email = $1 AND otp_code = $2 AND purpose = $3 AND expires_at > NOW() AND is_used = FALSE',
@@ -258,7 +286,7 @@ app.post('/api/verify-login', async (req, res) => {
 });
 
 // Get all mentors
-app.get('/api/mentors', async (req, res) => {
+app.get('/api/mentors', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT mp.*, u.username, u.email FROM mentor_profiles mp JOIN users u ON mp.user_id = u.id WHERE u.role = $1',
@@ -270,8 +298,8 @@ app.get('/api/mentors', async (req, res) => {
       name: mentor.name || mentor.username,
       bio: mentor.bio || 'Experienced mentor ready to help you grow.',
       profilePicture: mentor.profile_picture,
-      skills: mentor.skills ? JSON.parse(mentor.skills) : [],
-      interests: mentor.interests ? JSON.parse(mentor.interests) : [],
+      skills: safeJsonParse(mentor.skills, []),
+      interests: safeJsonParse(mentor.interests, []),
       rating: 4.8,
       reviewCount: Math.floor(Math.random() * 50) + 10
     }));
@@ -283,7 +311,7 @@ app.get('/api/mentors', async (req, res) => {
 });
 
 // Video call endpoints
-app.post('/api/video-call/request', async (req, res) => {
+app.post('/api/video-call/request', authenticateToken, async (req, res) => {
   try {
     const { menteeId, mentorId, channelName } = req.body;
     
@@ -298,7 +326,7 @@ app.post('/api/video-call/request', async (req, res) => {
   }
 });
 
-app.post('/api/video-call/:callId/accept', async (req, res) => {
+app.post('/api/video-call/:callId/accept', authenticateToken, async (req, res) => {
   try {
     const { callId } = req.params;
     
@@ -313,7 +341,7 @@ app.post('/api/video-call/:callId/accept', async (req, res) => {
   }
 });
 
-app.get('/api/video-calls/:userId', async (req, res) => {
+app.get('/api/video-calls/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
