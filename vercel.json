@@ -9,7 +9,9 @@
       "src": "FRONTEND/frontone/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "build"
+        "distDir": "build",
+        "installCommand": "npm install",
+        "buildCommand": "npm run build"
       }
     }
   ],
@@ -27,13 +29,5 @@
     "BACKEND/api/index.js": {
       "maxDuration": 30
     }
-  },
-  "env": {
-    "DATABASE_URL": "@database_url",
-    "JWT_SECRET": "@jwt_secret",
-    "MAILJET_API_KEY": "@mailjet_api_key",
-    "MAILJET_SECRET_KEY": "@mailjet_secret_key",
-    "MAILJET_SENDER_EMAIL": "@mailjet_sender_email",
-    "NODE_ENV": "production"
   }
 }
