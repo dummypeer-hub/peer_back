@@ -61,6 +61,10 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 
 // Send OTP email
 const sendOTPEmail = async (email, otp, purpose) => {
+  if (!process.env.MAILJET_API_KEY || !process.env.MAILJET_SECRET_KEY) {
+    throw new Error('Mailjet credentials not configured');
+  }
+
   const subject = purpose === 'signup' ? 'PeerVerse - Email Verification' : 'PeerVerse - Login Verification';
   
   const html = `
@@ -79,21 +83,28 @@ const sendOTPEmail = async (email, otp, purpose) => {
     </div>
   `;
 
-  const request = mailjet.post('send', { version: 'v3.1' }).request({
-    Messages: [
-      {
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL,
-          Name: 'PeerVerse'
-        },
-        To: [{ Email: email }],
-        Subject: subject,
-        HTMLPart: html
-      }
-    ]
-  });
-  
-  await request;
+  try {
+    const request = mailjet.post('send', { version: 'v3.1' }).request({
+      Messages: [
+        {
+          From: {
+            Email: process.env.MAILJET_SENDER_EMAIL || 'noreply@peerverse.com',
+            Name: 'PeerVerse'
+          },
+          To: [{ Email: email }],
+          Subject: subject,
+          HTMLPart: html
+        }
+      ]
+    });
+    
+    const result = await request;
+    console.log('Email sent successfully:', result.body);
+    return result;
+  } catch (error) {
+    console.error('Mailjet error:', error.statusCode, error.message);
+    throw error;
+  }
 };
 
 // Test endpoint
@@ -152,6 +163,7 @@ app.post('/api/signup', async (req, res) => {
         tempUserId: Buffer.from(JSON.stringify(tempUserData)).toString('base64')
       });
     } catch (emailError) {
+      console.error('Email sending failed:', emailError);
       res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
     }
   } catch (error) {
@@ -236,6 +248,7 @@ app.post('/api/login', async (req, res) => {
         userId: user.id
       });
     } catch (emailError) {
+      console.error('Email sending failed:', emailError);
       res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
     }
   } catch (error) {

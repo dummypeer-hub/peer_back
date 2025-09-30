@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "BACKEND/api/index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "FRONTEND/frontone/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "BACKEND/api/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "FRONTEND/frontone/$1"
+    }
+  ],
+  "functions": {
+    "BACKEND/api/index.js": {
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET": "@jwt_secret",
+    "MAILJET_API_KEY": "@mailjet_api_key",
+    "MAILJET_SECRET_KEY": "@mailjet_secret_key",
+    "MAILJET_SENDER_EMAIL": "@mailjet_sender_email",
+    "NODE_ENV": "production"
+  }
+}

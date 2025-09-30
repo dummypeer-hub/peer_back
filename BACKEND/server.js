@@ -4,8 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const mailjet = require('node-mailjet').apiConnect(
-  process.env.MAILJET_API_KEY,
-  process.env.MAILJET_SECRET_KEY
+  process.env.MAILJET_API_KEY || '2ab8bdb99980ef4e41140d4587a0495c',
+  process.env.MAILJET_SECRET_KEY || '2d26f17122aeb9dce852beae28da4a66'
 );
 const rateLimit = require('express-rate-limit');
 const axios = require('axios');
@@ -208,7 +208,7 @@ const sendOTPEmail = async (email, otp, purpose) => {
     Messages: [
       {
         From: {
-          Email: process.env.MAILJET_SENDER_EMAIL,
+          Email: process.env.MAILJET_SENDER_EMAIL || 'ninadkhopade16@gmail.com',
           Name: 'PeerVerse'
         },
         To: [
