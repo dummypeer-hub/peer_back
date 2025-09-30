@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd frontone && npm run build",
+  "outputDirectory": "frontone/build",
+  "installCommand": "cd frontone && npm install"
+}
