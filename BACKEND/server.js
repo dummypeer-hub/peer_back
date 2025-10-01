@@ -31,22 +31,26 @@ const PORT = process.env.PORT || 3000;
 const CLOUDFLARE_APP_ID = 'ccb11479d57e58d6450a4743bad9a1e8';
 const CLOUDFLARE_API_TOKEN = '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514';
 
-// Simple in-memory cache
+// Optimized in-memory cache
 const cache = new Map();
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes for better performance
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes for faster updates
+const LONG_CACHE_TTL = 30 * 60 * 1000; // 30 minutes for static data
 
-const getFromCache = (key) => {
+const getFromCache = (key, ttl = CACHE_TTL) => {
   const item = cache.get(key);
-  if (item && Date.now() - item.timestamp < CACHE_TTL) {
+  if (item && Date.now() - item.timestamp < ttl) {
     return item.data;
   }
   cache.delete(key);
   return null;
 };
 
-const setCache = (key, data) => {
-  cache.set(key, { data, timestamp: Date.now() });
+const setCache = (key, data, ttl = CACHE_TTL) => {
+  cache.set(key, { data, timestamp: Date.now(), ttl });
 };
+
+const getLongCache = (key) => getFromCache(key, LONG_CACHE_TTL);
+const setLongCache = (key, data) => setCache(key, data, LONG_CACHE_TTL);
 
 const clearCachePattern = (pattern) => {
   for (const key of cache.keys()) {
@@ -460,14 +464,18 @@ app.post('/api/reset-password', async (req, res) => {
   }
 });
 
-// Mentor Profile endpoints
+// Mentor Profile endpoints - Optimized
 app.get('/api/mentor/profile/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const cacheKey = `mentor_profile_${userId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) {
+      return res.json({ profile: cached });
+    }
     
-    // Use a single optimized query
     const result = await pool.query(
-      'SELECT * FROM mentor_profiles WHERE user_id = $1',
+      'SELECT name, profile_picture, bio, education, skills, background, interests, languages, availability FROM mentor_profiles WHERE user_id = $1',
       [userId]
     );
     
@@ -484,7 +492,7 @@ app.get('/api/mentor/profile/:userId', async (req, res) => {
         const parsed = typeof profile.interests === 'string' ? JSON.parse(profile.interests) : profile.interests;
         interestsData = Array.isArray(parsed) ? { interests: parsed, selectedCategories: [] } : parsed;
       } catch (e) {
-        console.error('Error parsing interests:', e);
+        interestsData = { selectedCategories: [], interests: [] };
       }
     }
     
@@ -504,6 +512,7 @@ app.get('/api/mentor/profile/:userId', async (req, res) => {
       availability: profile.availability || {}
     };
     
+    setCache(cacheKey, profileData);
     res.json({ profile: profileData });
   } catch (error) {
     console.error('Get profile error:', error);
@@ -649,17 +658,17 @@ app.patch('/api/mentor/profile/:userId/section', async (req, res) => {
   }
 });
 
-// Get all mentors for mentee dashboard
+// Get all mentors for mentee dashboard - Optimized
 app.get('/api/mentors', async (req, res) => {
   try {
     const cacheKey = 'mentors_list';
-    const cached = getFromCache(cacheKey);
+    const cached = getLongCache(cacheKey);
     if (cached) {
       return res.json({ mentors: cached });
     }
     
     const result = await pool.query(
-      'SELECT mp.*, u.username, u.email FROM mentor_profiles mp JOIN users u ON mp.user_id = u.id WHERE u.role = $1 AND mp.name IS NOT NULL AND mp.name != \'\'',
+      'SELECT mp.user_id, mp.name, mp.bio, mp.profile_picture, mp.skills, mp.interests, mp.education, mp.background, mp.languages, mp.availability, u.username FROM mentor_profiles mp JOIN users u ON mp.user_id = u.id WHERE u.role = $1 AND mp.name IS NOT NULL AND mp.name != \'\'',
       ['mentor']
     );
     
@@ -755,7 +764,7 @@ app.get('/api/mentors', async (req, res) => {
       };
     });
     
-    setCache(cacheKey, mentors);
+    setLongCache(cacheKey, mentors);
     res.json({ mentors });
   } catch (error) {
     console.error('Get mentors error:', error);
@@ -829,32 +838,45 @@ app.get('/api/mentee/:menteeId/liked-blogs', async (req, res) => {
   }
 });
 
-// Blog endpoints
+// Blog endpoints - Optimized
 app.get('/api/blogs', async (req, res) => {
   try {
     const cacheKey = 'all_blogs';
-    const cached = getFromCache(cacheKey);
+    const cached = getLongCache(cacheKey);
     if (cached) {
       return res.json({ blogs: cached });
     }
     
     const result = await pool.query(`
-      SELECT b.*, u.username as mentor_name, mp.name as mentor_display_name, mp.profile_picture as mentor_avatar
+      SELECT b.id, b.title, b.description, b.content, b.category, b.tags, b.images, 
+             b.likes_count, b.comments_count, b.created_at, b.mentor_id,
+             COALESCE(mp.name, u.username) as mentor_name, 
+             mp.profile_picture as mentor_avatar
       FROM blogs b 
       JOIN users u ON b.mentor_id = u.id 
       LEFT JOIN mentor_profiles mp ON b.mentor_id = mp.user_id
       WHERE b.is_published = true 
       ORDER BY b.created_at DESC
+      LIMIT 50
     `);
     
     const blogs = result.rows.map(blog => ({
-      ...blog,
-      mentor_name: blog.mentor_display_name || blog.mentor_name,
+      id: blog.id,
+      title: blog.title,
+      description: blog.description,
+      content: blog.content,
+      category: blog.category,
+      tags: blog.tags || [],
       images: blog.images || [],
-      tags: blog.tags || []
+      likes_count: blog.likes_count || 0,
+      comments_count: blog.comments_count || 0,
+      created_at: blog.created_at,
+      mentor_id: blog.mentor_id,
+      mentor_name: blog.mentor_name,
+      mentor_avatar: blog.mentor_avatar
     }));
     
-    setCache(cacheKey, blogs);
+    setLongCache(cacheKey, blogs);
     res.json({ blogs });
   } catch (error) {
     console.error('Get blogs error:', error);
@@ -865,17 +887,32 @@ app.get('/api/blogs', async (req, res) => {
 app.get('/api/blogs/mentor/:mentorId', async (req, res) => {
   try {
     const { mentorId } = req.params;
+    const cacheKey = `mentor_blogs_${mentorId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) {
+      return res.json({ blogs: cached });
+    }
+    
     const result = await pool.query(
-      'SELECT * FROM blogs WHERE mentor_id = $1 ORDER BY created_at DESC',
+      'SELECT id, title, description, content, category, tags, images, likes_count, comments_count, created_at, is_published FROM blogs WHERE mentor_id = $1 ORDER BY created_at DESC LIMIT 20',
       [mentorId]
     );
     
     const blogs = result.rows.map(blog => ({
-      ...blog,
+      id: blog.id,
+      title: blog.title,
+      description: blog.description,
+      content: blog.content,
+      category: blog.category,
+      tags: blog.tags || [],
       images: blog.images || [],
-      tags: blog.tags || []
+      likes_count: blog.likes_count || 0,
+      comments_count: blog.comments_count || 0,
+      created_at: blog.created_at,
+      is_published: blog.is_published
     }));
     
+    setCache(cacheKey, blogs);
     res.json({ blogs });
   } catch (error) {
     console.error('Get mentor blogs error:', error);
@@ -1084,15 +1121,22 @@ app.delete('/api/comments/:commentId', async (req, res) => {
   }
 });
 
-// Notifications
+// Notifications - Optimized
 app.get('/api/notifications/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const cacheKey = `notifications_${userId}`;
+    const cached = getFromCache(cacheKey, 60000); // 1 minute cache for notifications
+    if (cached) {
+      return res.json({ notifications: cached });
+    }
+    
     const result = await pool.query(
-      'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      'SELECT id, type, title, message, is_read, created_at, related_id, related_type FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30',
       [userId]
     );
     
+    setCache(cacheKey, result.rows, 60000);
     res.json({ notifications: result.rows });
   } catch (error) {
     console.error('Get notifications error:', error);
@@ -1130,23 +1174,38 @@ app.delete('/api/notifications/:userId', async (req, res) => {
   }
 });
 
-// Community endpoints
+// Community endpoints - Optimized
 app.get('/api/communities', async (req, res) => {
   try {
+    const cacheKey = 'all_communities';
+    const cached = getFromCache(cacheKey);
+    if (cached) {
+      return res.json({ communities: cached });
+    }
+    
     const result = await pool.query(`
-      SELECT c.*, u.username as mentor_name, mp.name as mentor_display_name
+      SELECT c.id, c.name, c.description, c.interest_category, c.member_count, c.created_at, c.mentor_id,
+             COALESCE(mp.name, u.username) as mentor_name
       FROM communities c
       JOIN users u ON c.mentor_id = u.id
       LEFT JOIN mentor_profiles mp ON c.mentor_id = mp.user_id
       WHERE c.is_active = true
       ORDER BY c.created_at DESC
+      LIMIT 30
     `);
     
     const communities = result.rows.map(community => ({
-      ...community,
-      mentor_name: community.mentor_display_name || community.mentor_name
+      id: community.id,
+      name: community.name,
+      description: community.description,
+      interest_category: community.interest_category,
+      member_count: community.member_count || 0,
+      created_at: community.created_at,
+      mentor_id: community.mentor_id,
+      mentor_name: community.mentor_name
     }));
     
+    setCache(cacheKey, communities);
     res.json({ communities });
   } catch (error) {
     console.error('Get communities error:', error);
@@ -1556,87 +1615,54 @@ app.put('/api/mentee/profile/:userId', async (req, res) => {
   }
 });
 
-// Statistics endpoints
+// Statistics endpoints - Optimized
 app.get('/api/mentor/stats/:mentorId', async (req, res) => {
   try {
     const { mentorId } = req.params;
+    const cacheKey = `mentor_stats_${mentorId}`;
+    const cached = getFromCache(cacheKey, 120000); // 2 minute cache for stats
+    if (cached) {
+      return res.json(cached);
+    }
     
-    // Get session stats
-    const sessionStats = await pool.query(`
+    // Single optimized query for all stats
+    const result = await pool.query(`
       SELECT 
-        COUNT(*) as total_sessions,
-        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_sessions,
-        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_sessions
-      FROM video_calls WHERE mentor_id = $1
+        (SELECT COUNT(*) FROM video_calls WHERE mentor_id = $1) as total_sessions,
+        (SELECT COUNT(*) FROM video_calls WHERE mentor_id = $1 AND status = 'completed') as completed_sessions,
+        (SELECT COUNT(*) FROM video_calls WHERE mentor_id = $1 AND status = 'pending') as pending_sessions,
+        (SELECT COUNT(*) FROM blogs WHERE mentor_id = $1) as total_blogs,
+        (SELECT COALESCE(SUM(amount), 0) FROM mentor_earnings WHERE mentor_id = $1) as total_earnings,
+        (SELECT name, bio, profile_picture, education, skills, background, interests FROM mentor_profiles WHERE user_id = $1) as profile
     `, [mentorId]);
     
-    // Get blog count
-    const blogStats = await pool.query(
-      'SELECT COUNT(*) as total_blogs FROM blogs WHERE mentor_id = $1',
-      [mentorId]
-    );
+    const stats = result.rows[0];
+    let profileCompletion = 25; // Default
     
-    // Get earnings
-    const earningsStats = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) as total_earnings FROM mentor_earnings WHERE mentor_id = $1',
-      [mentorId]
-    );
-    
-    // Get profile completion
-    const profileStats = await pool.query(
-      'SELECT * FROM mentor_profiles WHERE user_id = $1',
-      [mentorId]
-    );
-    
-    let profileCompletion = 0;
-    if (profileStats.rows.length > 0) {
-      const profile = profileStats.rows[0];
+    if (stats.profile) {
       let completed = 0;
-      let total = 7;
-      
+      const profile = stats.profile;
       if (profile.name) completed++;
       if (profile.bio) completed++;
       if (profile.profile_picture) completed++;
-      
-      try {
-        if (profile.education) {
-          const education = typeof profile.education === 'string' ? JSON.parse(profile.education) : profile.education;
-          if (Array.isArray(education) && education.length > 0) completed++;
-        }
-      } catch (e) { /* ignore */ }
-      
-      try {
-        if (profile.skills) {
-          const skills = typeof profile.skills === 'string' ? JSON.parse(profile.skills) : profile.skills;
-          if (Array.isArray(skills) && skills.length > 0) completed++;
-        }
-      } catch (e) { /* ignore */ }
-      
-      try {
-        if (profile.background) {
-          const background = typeof profile.background === 'string' ? JSON.parse(profile.background) : profile.background;
-          if (Array.isArray(background) && background.length > 0) completed++;
-        }
-      } catch (e) { /* ignore */ }
-      
-      try {
-        if (profile.interests) {
-          const interests = typeof profile.interests === 'string' ? JSON.parse(profile.interests) : profile.interests;
-          if ((Array.isArray(interests) && interests.length > 0) || (interests && Object.keys(interests).length > 0)) completed++;
-        }
-      } catch (e) { /* ignore */ }
-      
-      profileCompletion = Math.round((completed / total) * 100);
+      if (profile.education && Array.isArray(profile.education) && profile.education.length > 0) completed++;
+      if (profile.skills && Array.isArray(profile.skills) && profile.skills.length > 0) completed++;
+      if (profile.background && Array.isArray(profile.background) && profile.background.length > 0) completed++;
+      if (profile.interests) completed++;
+      profileCompletion = Math.round((completed / 7) * 100);
     }
     
-    res.json({
-      totalSessions: parseInt(sessionStats.rows[0].total_sessions),
-      completedSessions: parseInt(sessionStats.rows[0].completed_sessions),
-      pendingSessions: parseInt(sessionStats.rows[0].pending_sessions),
-      totalBlogs: parseInt(blogStats.rows[0].total_blogs),
-      walletBalance: parseFloat(earningsStats.rows[0].total_earnings),
+    const statsData = {
+      totalSessions: parseInt(stats.total_sessions) || 0,
+      completedSessions: parseInt(stats.completed_sessions) || 0,
+      pendingSessions: parseInt(stats.pending_sessions) || 0,
+      totalBlogs: parseInt(stats.total_blogs) || 0,
+      walletBalance: parseFloat(stats.total_earnings) || 0,
       profileCompletion
-    });
+    };
+    
+    setCache(cacheKey, statsData, 120000);
+    res.json(statsData);
   } catch (error) {
     console.error('Get mentor stats error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -1646,34 +1672,32 @@ app.get('/api/mentor/stats/:mentorId', async (req, res) => {
 app.get('/api/mentee/stats/:menteeId', async (req, res) => {
   try {
     const { menteeId } = req.params;
+    const cacheKey = `mentee_stats_${menteeId}`;
+    const cached = getFromCache(cacheKey, 120000); // 2 minute cache
+    if (cached) {
+      return res.json(cached);
+    }
     
-    // Get available mentors count
-    const mentorCount = await pool.query(
-      'SELECT COUNT(*) as available_mentors FROM mentor_profiles mp JOIN users u ON mp.user_id = u.id WHERE u.role = $1',
-      ['mentor']
-    );
-    
-    // Get favorite mentors count
-    const favoriteCount = await pool.query(
-      'SELECT COUNT(*) as favorite_mentors FROM mentee_favorites WHERE mentee_id = $1',
-      [menteeId]
-    );
-    
-    // Get completed sessions count
-    const sessionStats = await pool.query(`
+    // Single optimized query for all stats
+    const result = await pool.query(`
       SELECT 
-        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_sessions,
-        COALESCE(SUM(CASE WHEN status = 'completed' AND started_at IS NOT NULL AND ended_at IS NOT NULL 
-          THEN EXTRACT(EPOCH FROM (ended_at::timestamp - started_at::timestamp))/3600 END), 0) as hours_learned
-      FROM video_calls WHERE mentee_id = $1
+        (SELECT COUNT(*) FROM mentor_profiles mp JOIN users u ON mp.user_id = u.id WHERE u.role = 'mentor') as available_mentors,
+        (SELECT COUNT(*) FROM mentee_favorites WHERE mentee_id = $1) as favorite_mentors,
+        (SELECT COUNT(CASE WHEN status = 'completed' THEN 1 END) FROM video_calls WHERE mentee_id = $1) as completed_sessions,
+        (SELECT COALESCE(SUM(CASE WHEN status = 'completed' AND started_at IS NOT NULL AND ended_at IS NOT NULL 
+          THEN EXTRACT(EPOCH FROM (ended_at::timestamp - started_at::timestamp))/3600 END), 0) FROM video_calls WHERE mentee_id = $1) as hours_learned
     `, [menteeId]);
     
-    res.json({
-      availableMentors: parseInt(mentorCount.rows[0].available_mentors),
-      favoriteMentors: parseInt(favoriteCount.rows[0].favorite_mentors),
-      completedSessions: parseInt(sessionStats.rows[0].completed_sessions),
-      hoursLearned: parseFloat(sessionStats.rows[0].hours_learned || 0).toFixed(1)
-    });
+    const stats = result.rows[0];
+    const statsData = {
+      availableMentors: parseInt(stats.available_mentors) || 0,
+      favoriteMentors: parseInt(stats.favorite_mentors) || 0,
+      completedSessions: parseInt(stats.completed_sessions) || 0,
+      hoursLearned: parseFloat(stats.hours_learned || 0).toFixed(1)
+    };
+    
+    setCache(cacheKey, statsData, 120000);
+    res.json(statsData);
   } catch (error) {
     console.error('Get mentee stats error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -2127,9 +2151,14 @@ app.get('/api/video-call/:callId/status', async (req, res) => {
 app.get('/api/video-calls/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const cacheKey = `user_calls_${userId}`;
+    const cached = getFromCache(cacheKey, 60000); // 1 minute cache
+    if (cached) {
+      return res.json({ calls: cached });
+    }
     
     const result = await pool.query(`
-      SELECT vc.*, 
+      SELECT vc.id, vc.status, vc.created_at, vc.accepted_at, vc.started_at, vc.ended_at, vc.channel_name,
              mentee.username as mentee_name,
              mentor.username as mentor_name
       FROM video_calls vc
@@ -2137,9 +2166,10 @@ app.get('/api/video-calls/:userId', async (req, res) => {
       JOIN users mentor ON vc.mentor_id = mentor.id
       WHERE vc.mentee_id = $1 OR vc.mentor_id = $1
       ORDER BY vc.created_at DESC
-      LIMIT 20
+      LIMIT 15
     `, [userId]);
     
+    setCache(cacheKey, result.rows, 60000);
     res.json({ calls: result.rows });
   } catch (error) {
     console.error('Get user calls error:', error);
