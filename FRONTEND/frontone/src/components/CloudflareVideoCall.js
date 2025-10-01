@@ -202,8 +202,9 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       // Get user media with better constraints
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          aspectRatio: { ideal: 16/9 },
           frameRate: { ideal: 30 }
         },
         audio: {

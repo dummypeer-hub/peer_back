@@ -1908,6 +1908,23 @@ app.post('/api/video-call/request', async (req, res) => {
       return res.status(400).json({ error: 'Missing menteeId or mentorId' });
     }
     
+    // Clean up old pending calls (older than 5 minutes)
+    await pool.query(
+      'UPDATE video_calls SET status = $1 WHERE mentee_id = $2 AND mentor_id = $3 AND status = $4 AND created_at < NOW() - INTERVAL \'5 minutes\'',
+      ['cancelled', menteeId, mentorId, 'pending']
+    );
+    
+    // Check for existing pending call to prevent duplicates
+    const existingCall = await pool.query(
+      'SELECT id FROM video_calls WHERE mentee_id = $1 AND mentor_id = $2 AND status = $3',
+      [menteeId, mentorId, 'pending']
+    );
+    
+    if (existingCall.rows.length > 0) {
+      console.log('⚠️ Duplicate call request prevented');
+      return res.json({ callId: existingCall.rows[0].id, message: 'Call request already exists' });
+    }
+    
     // Create call session with current server time
     console.log('📝 Creating call session in database...');
     const result = await pool.query(
