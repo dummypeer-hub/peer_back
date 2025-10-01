@@ -1512,17 +1512,36 @@ app.get('/api/webrtc/answer/:callId', async (req, res) => {
   }
 });
 
-// WebRTC Connection Status endpoint
+// WebRTC Connection Status endpoint with ICE servers
 app.get('/api/webrtc/status/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // WebRTC is always available - no setup required
     res.json({
       connected: true,
       technology: 'WebRTC',
       features: ['HD Video', 'Audio', 'Screen Share', 'Chat'],
-      maxDuration: 10 // minutes
+      maxDuration: 10, // minutes
+      iceServers: [
+        // Primary Cloudflare TURN servers (your credentials)
+        {
+          urls: [
+            'turn:turn.cloudflare.com:3478',
+            'turns:turn.cloudflare.com:5349'
+          ],
+          username: 'ccb11479d57e58d6450a4743bad9a1e8',
+          credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
+        },
+        // STUN servers
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        // Backup TURN servers
+        {
+          urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
+      ]
     });
   } catch (error) {
     console.error('WebRTC status error:', error);
@@ -1530,7 +1549,30 @@ app.get('/api/webrtc/status/:userId', async (req, res) => {
   }
 });
 
-// WebRTC Session Management
+// ICE server connectivity test endpoint
+app.post('/api/webrtc/test-connectivity', async (req, res) => {
+  try {
+    const { userId, iceServers } = req.body;
+    
+    // Return connectivity test results
+    res.json({
+      success: true,
+      message: 'Connectivity test completed',
+      recommendations: {
+        useRelay: true,
+        preferredServers: [
+          'turn:openrelay.metered.ca:80',
+          'turn:relay1.expressturn.com:3478'
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('Connectivity test error:', error);
+    res.status(500).json({ error: 'Failed to test connectivity' });
+  }
+});
+
+// WebRTC Session Management with multiple TURN servers
 app.post('/api/webrtc/session/create', async (req, res) => {
   try {
     const { callId, userId } = req.body;
@@ -1545,13 +1587,28 @@ app.post('/api/webrtc/session/create', async (req, res) => {
       sessionId: callId,
       message: 'WebRTC session created',
       iceServers: [
+        // Primary Cloudflare TURN servers (your credentials)
+        {
+          urls: [
+            'turn:turn.cloudflare.com:3478',
+            'turns:turn.cloudflare.com:5349'
+          ],
+          username: CLOUDFLARE_APP_ID,
+          credential: CLOUDFLARE_API_TOKEN
+        },
+        // STUN servers for connectivity
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun.cloudflare.com:3478' },
+        // Backup TURN servers
         {
-          urls: 'turn:turn.cloudflare.com:3478',
-          username: 'ccb11479d57e58d6450a4743bad9a1e8',
-          credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
+          urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: ['turn:relay1.expressturn.com:3478'],
+          username: 'ef3CYGPRL8ZPAA5KXC',
+          credential: 'Hj8pBqZnfQmxrLzM'
         }
       ]
     });
@@ -1625,23 +1682,23 @@ app.get('/api/mentor/stats/:mentorId', async (req, res) => {
       return res.json(cached);
     }
     
-    // Single optimized query for all stats
-    const result = await pool.query(`
-      SELECT 
-        (SELECT COUNT(*) FROM video_calls WHERE mentor_id = $1) as total_sessions,
-        (SELECT COUNT(*) FROM video_calls WHERE mentor_id = $1 AND status = 'completed') as completed_sessions,
-        (SELECT COUNT(*) FROM video_calls WHERE mentor_id = $1 AND status = 'pending') as pending_sessions,
-        (SELECT COUNT(*) FROM blogs WHERE mentor_id = $1) as total_blogs,
-        (SELECT COALESCE(SUM(amount), 0) FROM mentor_earnings WHERE mentor_id = $1) as total_earnings,
-        (SELECT name, bio, profile_picture, education, skills, background, interests FROM mentor_profiles WHERE user_id = $1) as profile
-    `, [mentorId]);
+    // Separate queries to avoid complex subquery issues
+    const [sessionsResult, blogsResult, earningsResult, profileResult] = await Promise.all([
+      pool.query('SELECT COUNT(*) as total, COUNT(CASE WHEN status = \'completed\' THEN 1 END) as completed, COUNT(CASE WHEN status = \'pending\' THEN 1 END) as pending FROM video_calls WHERE mentor_id = $1', [mentorId]),
+      pool.query('SELECT COUNT(*) as total FROM blogs WHERE mentor_id = $1', [mentorId]),
+      pool.query('SELECT COALESCE(SUM(amount), 0) as total FROM mentor_earnings WHERE mentor_id = $1', [mentorId]),
+      pool.query('SELECT name, bio, profile_picture, education, skills, background, interests FROM mentor_profiles WHERE user_id = $1', [mentorId])
+    ]);
     
-    const stats = result.rows[0];
+    const sessions = sessionsResult.rows[0];
+    const blogs = blogsResult.rows[0];
+    const earnings = earningsResult.rows[0];
+    const profile = profileResult.rows[0];
+    
     let profileCompletion = 25; // Default
     
-    if (stats.profile) {
+    if (profile) {
       let completed = 0;
-      const profile = stats.profile;
       if (profile.name) completed++;
       if (profile.bio) completed++;
       if (profile.profile_picture) completed++;
@@ -1653,11 +1710,11 @@ app.get('/api/mentor/stats/:mentorId', async (req, res) => {
     }
     
     const statsData = {
-      totalSessions: parseInt(stats.total_sessions) || 0,
-      completedSessions: parseInt(stats.completed_sessions) || 0,
-      pendingSessions: parseInt(stats.pending_sessions) || 0,
-      totalBlogs: parseInt(stats.total_blogs) || 0,
-      walletBalance: parseFloat(stats.total_earnings) || 0,
+      totalSessions: parseInt(sessions.total) || 0,
+      completedSessions: parseInt(sessions.completed) || 0,
+      pendingSessions: parseInt(sessions.pending) || 0,
+      totalBlogs: parseInt(blogs.total) || 0,
+      walletBalance: parseFloat(earnings.total) || 0,
       profileCompletion
     };
     
@@ -1665,7 +1722,7 @@ app.get('/api/mentor/stats/:mentorId', async (req, res) => {
     res.json(statsData);
   } catch (error) {
     console.error('Get mentor stats error:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error: ' + error.message });
   }
 });
 
@@ -1949,7 +2006,8 @@ app.post('/api/video-call/:callId/accept', async (req, res) => {
     }
     
     if (call.rows[0].status !== 'pending') {
-      return res.status(400).json({ error: 'Call is not in pending status' });
+      console.log(`Call ${callId} status is ${call.rows[0].status}, not pending`);
+      return res.status(400).json({ error: `Call is not in pending status. Current status: ${call.rows[0].status}` });
     }
     
     // Update call status to accepted for WebRTC

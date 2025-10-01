@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import config from '../config';
+import { createPeerConnection, testConnectivity } from '../utils/webrtc';
+import ConnectionIndicator from './ConnectionIndicator';
 import './CloudflareVideoCall.css';
 
 // Singleton Socket Manager for multiple concurrent calls
@@ -137,10 +139,25 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const socketRef = useRef();
   const pcRef = useRef();
 
-  const CLOUDFLARE_CONFIG = {
+  const WEBRTC_CONFIG = {
     iceServers: [
+      // Multiple STUN servers for better connectivity
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      // Multiple TURN servers for NAT traversal
+      {
+        urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443'],
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: ['turn:relay1.expressturn.com:3478'],
+        username: 'ef3CYGPRL8ZPAA5KXC',
+        credential: 'Hj8pBqZnfQmxrLzM'
+      },
       {
         urls: 'turn:turn.cloudflare.com:3478',
         username: 'ccb11479d57e58d6450a4743bad9a1e8',
@@ -149,7 +166,8 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     ],
     iceCandidatePoolSize: 10,
     bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require'
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all'
   };
 
   useEffect(() => {
@@ -176,6 +194,11 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
 
   const initializeCall = async () => {
     try {
+      // Test connectivity first
+      console.log('Testing connectivity...');
+      const connectivityResults = await testConnectivity(WEBRTC_CONFIG.iceServers);
+      console.log('Connectivity test results:', connectivityResults);
+      
       // Get user media with better constraints
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -195,41 +218,37 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection
-      const pc = new RTCPeerConnection(CLOUDFLARE_CONFIG);
+      // Create peer connection using utility function
+      const pc = createPeerConnection(
+        (candidate) => {
+          if (socketManager.isConnected()) {
+            socketManager.emit('webrtc_ice_candidate', {
+              callId,
+              candidate,
+              userId: user.id
+            });
+          }
+        },
+        (event) => {
+          const [remoteStream] = event.streams;
+          setRemoteStream(remoteStream);
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = remoteStream;
+          }
+        },
+        (connectionState) => {
+          setIsConnected(connectionState === 'connected');
+          if (connectionState === 'connected' && !sessionStarted) {
+            setSessionStarted(true);
+            startSession();
+          }
+        }
+      );
       
       // Add local stream to peer connection
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
-
-      // Handle remote stream
-      pc.ontrack = (event) => {
-        const [remoteStream] = event.streams;
-        setRemoteStream(remoteStream);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        }
-      };
-
-      // Handle connection state
-      pc.onconnectionstatechange = () => {
-        console.log('Connection state:', pc.connectionState);
-        setIsConnected(pc.connectionState === 'connected');
-        if (pc.connectionState === 'connected' && !sessionStarted) {
-          setSessionStarted(true);
-          startSession();
-        }
-        if (pc.connectionState === 'failed') {
-          console.error('WebRTC connection failed');
-          alert('Connection failed. Please try again.');
-        }
-      };
-      
-      // Handle ICE connection state
-      pc.oniceconnectionstatechange = () => {
-        console.log('ICE connection state:', pc.iceConnectionState);
-      };
 
       // Create data channel for chat (only for mentor)
       if (user.role === 'mentor') {
@@ -502,6 +521,10 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
               Waiting for other participant...
             </div>
           )}
+          <ConnectionIndicator 
+            peerConnection={peerConnection} 
+            isConnected={isConnected} 
+          />
         </div>
         
         <div className="local-video">

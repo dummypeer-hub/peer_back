@@ -143,43 +143,35 @@ const VideoCall = ({ callId, user, onEndCall }) => {
         return;
       }
       
-      console.log('Initializing call for user:', user.id);
+      console.log('Initializing WebRTC call for user:', user.id);
       
-      // Get Agora token
-      const tokenResponse = await axios.post(`${config.API_BASE_URL}/video-call/token`, {
-        channelName: `call_${callId}`,
-        uid: user.id,
-        role: 'publisher'
+      // Get WebRTC configuration with TURN servers
+      const configResponse = await axios.get(`${config.API_BASE_URL}/webrtc/status/${user.id}`);
+      const webrtcConfig = {
+        iceServers: configResponse.data.iceServers || [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          {
+            urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ],
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
+      };
+      
+      console.log('WebRTC config:', webrtcConfig);
+      
+      // Create WebRTC session
+      await axios.post(`${config.API_BASE_URL}/webrtc/session/create`, {
+        callId,
+        userId: user.id
       });
       
-      const { token, appId } = tokenResponse.data;
-      
-      // Remove existing event listeners to prevent duplicates
-      client.removeAllListeners();
-      
-      // Set up client event handlers
-      client.on('user-published', handleUserPublished);
-      client.on('user-unpublished', handleUserUnpublished);
-      client.on('user-left', handleUserLeft);
-      
-      // Join channel
-      await client.join(appId, `call_${callId}`, token, user.id);
       setIsJoined(true);
-      console.log('Successfully joined channel');
-      
-      // Enable volume indicator for speaking detection
-      client.enableAudioVolumeIndicator();
-      
-      // Set up volume indicator event listener
-      client.on('volume-indicator', (volumes) => {
-        const speakingState = {};
-        volumes.forEach((volume) => {
-          // Map UID to actual user ID for proper identification
-          const actualUserId = volume.uid === user.id ? user.id : volume.uid;
-          speakingState[actualUserId] = volume.level > 0.1;
-        });
-        setSpeakingUsers(speakingState);
-      });
+      console.log('WebRTC session initialized');
       
       // Notify others about joining
       if (socket) {
@@ -224,7 +216,6 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       
     } catch (error) {
       console.error('Failed to initialize call:', error);
-      // Silently handle errors during auto-end
     }
   };
 

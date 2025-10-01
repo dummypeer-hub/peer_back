@@ -57,8 +57,7 @@ const BlogSection = ({ user, userRole }) => {
   const loadLikedBlogs = async () => {
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '${config.API_BASE_URL}' : '${config.API_BASE_URL}';
-      const response = await axios.get(`${apiBase}/api/mentee/${user.id}/liked-blogs`, {
+      const response = await axios.get(`${config.API_BASE_URL}/mentee/${user.id}/liked-blogs`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setLikedBlogs(response.data.likedBlogs || []);
@@ -72,8 +71,7 @@ const BlogSection = ({ user, userRole }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      const response = await axios.post(`${apiBase}/api/blogs/${blogId}/like`, {
+      const response = await axios.post(`${config.API_BASE_URL}/blogs/${blogId}/like`, {
         menteeId: user.id
       }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -98,8 +96,7 @@ const BlogSection = ({ user, userRole }) => {
   const loadComments = async (blogId) => {
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      const response = await axios.get(`${apiBase}/api/blogs/${blogId}/comments`, {
+      const response = await axios.get(`${config.API_BASE_URL}/blogs/${blogId}/comments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setComments(response.data.comments || []);
@@ -113,8 +110,7 @@ const BlogSection = ({ user, userRole }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      await axios.post(`${apiBase}/api/blogs/${selectedBlog.id}/comments`, {
+      await axios.post(`${config.API_BASE_URL}/blogs/${selectedBlog.id}/comments`, {
         userId: user.id,
         content: newComment
       }, {
@@ -126,11 +122,6 @@ const BlogSection = ({ user, userRole }) => {
       setBlogs(blogs.map(blog => 
         blog.id === selectedBlog.id ? { ...blog, comments_count: blog.comments_count + 1 } : blog
       ));
-      
-      // Clear cache to force refresh
-      const cacheKey = `blogs_${userRole}_${user.id}`;
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(`${cacheKey}_time`);
     } catch (error) {
       console.error('Failed to add comment:', error);
     }
@@ -141,8 +132,7 @@ const BlogSection = ({ user, userRole }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      await axios.post(`${apiBase}/api/blogs/${selectedBlog.id}/comments`, {
+      await axios.post(`${config.API_BASE_URL}/blogs/${selectedBlog.id}/comments`, {
         userId: user.id,
         content: replyText,
         parentCommentId
@@ -156,11 +146,6 @@ const BlogSection = ({ user, userRole }) => {
       setBlogs(blogs.map(blog => 
         blog.id === selectedBlog.id ? { ...blog, comments_count: blog.comments_count + 1 } : blog
       ));
-      
-      // Clear cache to force refresh
-      const cacheKey = `blogs_${userRole}_${user.id}`;
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(`${cacheKey}_time`);
     } catch (error) {
       console.error('Failed to add reply:', error);
     }
@@ -169,8 +154,7 @@ const BlogSection = ({ user, userRole }) => {
   const handleDeleteComment = async (commentId) => {
     try {
       const token = localStorage.getItem('token');
-      const apiBase = process.env.NODE_ENV === 'production' ? '' : '${config.API_BASE_URL}';
-      await axios.delete(`${apiBase}/api/comments/${commentId}`, {
+      await axios.delete(`${config.API_BASE_URL}/comments/${commentId}`, {
         data: { userId: user.id, userRole },
         headers: { Authorization: `Bearer ${token}` }
       });
