@@ -10,7 +10,11 @@ const api = {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
+      mode: 'cors',
     });
     
     if (!response.ok) {
@@ -25,7 +29,11 @@ const api = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
+      mode: 'cors',
       body: JSON.stringify(data),
     });
     
@@ -42,7 +50,11 @@ const api = {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
+      mode: 'cors',
       body: JSON.stringify(data),
     });
     
@@ -58,7 +70,11 @@ const api = {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
+      mode: 'cors',
       body: data ? JSON.stringify(data) : undefined,
     });
     

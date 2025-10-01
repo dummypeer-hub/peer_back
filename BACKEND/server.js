@@ -18,7 +18,7 @@ app.set('trust proxy', 1); // Trust Railway proxy
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['https://peerverse-final.vercel.app', 'http://localhost:3000', 'http://localhost:3001'],
+    origin: ['https://peerverse-final.vercel.app', 'https://peerverse.in', 'https://www.peerverse.in', 'http://localhost:3000', 'http://localhost:3001'],
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -158,7 +158,7 @@ const limiter = rateLimit({
 });
 
 app.use(cors({
-  origin: ['https://peerverse-final.vercel.app', 'http://localhost:3000', 'http://localhost:3001'],
+  origin: ['https://peerverse-final.vercel.app', 'https://peerverse.in', 'https://www.peerverse.in', 'http://localhost:3000', 'http://localhost:3001'],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
