@@ -1977,7 +1977,7 @@ app.post('/api/video-call/request', async (req, res) => {
       allRooms: io ? Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user_')) : []
     });
     
-    // Send real-time notification to mentor with multiple fallbacks
+    // Send real-time notification to mentor
     console.log(`📞 Sending call_request to mentor ${mentorId} in room ${mentorRoom}`);
     if (io) {
       const eventData = {
@@ -1989,20 +1989,12 @@ app.post('/api/video-call/request', async (req, res) => {
       };
       console.log('📤 Event data:', eventData);
       
-      // Send to specific room
       io.to(mentorRoom).emit('call_request', eventData);
+      console.log(`✅ Call request notification sent to mentor ${mentorId}`);
       
-      // Send to all sockets for this mentor (backup)
-      io.sockets.sockets.forEach((socket) => {
-        if (socket.userId === mentorId) {
-          socket.emit('call_request', eventData);
-        }
-      });
-      
-      // Global broadcast as final backup
+      // Also emit to all connected sockets as backup
       io.emit('global_call_request', { ...eventData, targetMentorId: mentorId });
-      
-      console.log(`✅ Call request sent via multiple channels to mentor ${mentorId}`);
+      console.log('📡 Global backup notification sent');
     } else {
       console.error('❌ Socket.IO not available for real-time notification');
     }
@@ -2053,14 +2045,7 @@ app.post('/api/video-call/:callId/accept', async (req, res) => {
         'INSERT INTO notifications (user_id, type, title, message, related_id, related_type) VALUES ($1, $2, $3, $4, $5, $6)',
         [call.rows[0].mentee_id, 'call_accepted', 'Call Accepted', 'Your video call request has been accepted. You can now join the session.', callId, 'video_call']
       );
-      // Clear notification cache
-      clearCachePattern(`notifications_${call.rows[0].mentee_id}`);
     }
-    
-    // Clear mentor notification cache too
-    clearCachePattern(`notifications_${mentorId}`);
-    clearCachePattern(`user_calls_${mentorId}`);
-    clearCachePattern(`user_calls_${call.rows[0].mentee_id}`);
     
     // Send real-time notification to mentee
     console.log(`✅ Sending call_accepted to mentee ${call.rows[0].mentee_id} in room user_${call.rows[0].mentee_id}`);
@@ -2290,13 +2275,9 @@ io.on('connection', (socket) => {
   socket.on('join_user_room', (userId) => {
     const roomName = `user_${userId}`;
     socket.join(roomName);
-    socket.userId = userId; // Store userId on socket for direct targeting
     const roomSize = io.sockets.adapter.rooms.get(roomName)?.size || 0;
     console.log(`[${new Date().toLocaleTimeString()}] 🏠 User ${userId} joined room: ${roomName} (${roomSize} members)`);
     console.log(`📋 All user rooms:`, Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user_')));
-    
-    // Send confirmation
-    socket.emit('room_joined', { userId, room: roomName });
   });
   
   socket.on('join_call', (callId) => {
