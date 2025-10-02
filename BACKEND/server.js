@@ -384,9 +384,11 @@ app.post('/api/verify-signup', async (req, res) => {
 // Login with email and password
 app.post('/api/login', async (req, res) => {
   try {
+    console.log('Login request received:', { email: req.body.email, role: req.body.role });
     const { email, password, role } = req.body;
     
     if (!email || !password || !role) {
+      console.log('Missing fields:', { email: !!email, password: !!password, role: !!role });
       return res.status(400).json({ error: 'All fields are required' });
     }
     
@@ -396,12 +398,22 @@ app.post('/api/login', async (req, res) => {
       [email, role]
     );
     
+    console.log('User query result:', result.rows.length > 0 ? 'User found' : 'User not found');
+    
     if (result.rows.length === 0) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
     const user = result.rows[0];
+    
+    // Check if password field exists and is not null
+    if (!user.password) {
+      console.error('User password is null or undefined for user:', user.id);
+      return res.status(400).json({ error: 'Account setup incomplete. Please contact support.' });
+    }
+    
     const isValidPassword = await bcrypt.compare(password, user.password);
+    console.log('Password validation:', isValidPassword ? 'Valid' : 'Invalid');
     
     if (!isValidPassword) {
       return res.status(400).json({ error: 'Invalid credentials' });
@@ -417,14 +429,16 @@ app.post('/api/login', async (req, res) => {
       role: user.role
     });
     
+    console.log('Login session created:', sessionId);
+    
     res.json({ 
       sessionId,
       userId: user.id,
       requiresPhoneVerification: true
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Login error details:', error);
+    res.status(500).json({ error: 'Server error: ' + error.message });
   }
 });
 

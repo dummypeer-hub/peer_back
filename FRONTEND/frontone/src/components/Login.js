@@ -21,33 +21,35 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
   const [recaptchaVerifier, setRecaptchaVerifier] = useState(null);
 
   useEffect(() => {
-    // Initialize reCAPTCHA
-    try {
-      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {
-          console.log('reCAPTCHA solved');
-        },
-        'expired-callback': () => {
-          console.log('reCAPTCHA expired');
-        },
-        'error-callback': (error) => {
-          console.error('reCAPTCHA error:', error);
-        }
-      });
-      setRecaptchaVerifier(verifier);
-      console.log('reCAPTCHA verifier initialized successfully');
-
-      return () => {
-        if (verifier) {
-          verifier.clear();
-        }
-      };
-    } catch (error) {
-      console.error('Failed to initialize reCAPTCHA:', error);
-      setError('Failed to initialize phone verification. Please refresh the page.');
+    // Initialize reCAPTCHA only when needed (step 2)
+    if (step === 2) {
+      try {
+        // Wait for DOM element to be available
+        setTimeout(() => {
+          const element = document.getElementById('recaptcha-container');
+          if (element && !recaptchaVerifier) {
+            const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+              size: 'invisible',
+              callback: () => {
+                console.log('reCAPTCHA solved');
+              }
+            });
+            setRecaptchaVerifier(verifier);
+            console.log('reCAPTCHA verifier initialized successfully');
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Failed to initialize reCAPTCHA:', error);
+      }
     }
-  }, []);
+
+    return () => {
+      if (recaptchaVerifier) {
+        recaptchaVerifier.clear();
+        setRecaptchaVerifier(null);
+      }
+    };
+  }, [step, recaptchaVerifier]);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

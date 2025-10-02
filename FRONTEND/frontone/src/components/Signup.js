@@ -24,33 +24,34 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
   const [recaptchaVerifier, setRecaptchaVerifier] = useState(null);
 
   useEffect(() => {
-    // Initialize reCAPTCHA
-    try {
-      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-signup', {
-        size: 'invisible',
-        callback: () => {
-          console.log('reCAPTCHA solved');
-        },
-        'expired-callback': () => {
-          console.log('reCAPTCHA expired');
-        },
-        'error-callback': (error) => {
-          console.error('reCAPTCHA error:', error);
-        }
-      });
-      setRecaptchaVerifier(verifier);
-      console.log('reCAPTCHA verifier initialized successfully for signup');
-
-      return () => {
-        if (verifier) {
-          verifier.clear();
-        }
-      };
-    } catch (error) {
-      console.error('Failed to initialize reCAPTCHA for signup:', error);
-      setError('Failed to initialize phone verification. Please refresh the page.');
+    // Initialize reCAPTCHA only when needed (step 2)
+    if (step === 2) {
+      try {
+        setTimeout(() => {
+          const element = document.getElementById('recaptcha-container-signup');
+          if (element && !recaptchaVerifier) {
+            const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-signup', {
+              size: 'invisible',
+              callback: () => {
+                console.log('reCAPTCHA solved');
+              }
+            });
+            setRecaptchaVerifier(verifier);
+            console.log('reCAPTCHA verifier initialized successfully for signup');
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Failed to initialize reCAPTCHA for signup:', error);
+      }
     }
-  }, []);
+
+    return () => {
+      if (recaptchaVerifier) {
+        recaptchaVerifier.clear();
+        setRecaptchaVerifier(null);
+      }
+    };
+  }, [step, recaptchaVerifier]);
 
   const handleRoleSelect = (role) => {
     setFormData({ ...formData, role });
