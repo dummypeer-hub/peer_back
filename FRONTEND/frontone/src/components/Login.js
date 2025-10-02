@@ -45,7 +45,11 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
 
     return () => {
       if (recaptchaVerifier) {
-        recaptchaVerifier.clear();
+        try {
+          recaptchaVerifier.clear();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
         setRecaptchaVerifier(null);
       }
     };
@@ -85,20 +89,42 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
     setError('');
 
     try {
+      console.log('=== PHONE VERIFICATION START ===');
+      console.log('Current step:', step);
+      console.log('Phone input:', formData.phone);
+      console.log('reCAPTCHA verifier available:', !!recaptchaVerifier);
+      
       if (!recaptchaVerifier) {
         throw new Error('reCAPTCHA not initialized. Please refresh the page.');
       }
 
       const phoneNumber = formData.phone.startsWith('+') ? formData.phone : `+91${formData.phone}`;
-      console.log('Attempting to send OTP to:', phoneNumber);
+      console.log('Formatted phone number:', phoneNumber);
+      console.log('Attempting to send OTP via Firebase...');
       
       // Send SMS OTP via Firebase
       const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-      console.log('OTP sent successfully, confirmation result:', !!confirmation);
-      setConfirmationResult(confirmation);
-      setStep(3); // Move to OTP step
+      console.log('Firebase signInWithPhoneNumber completed');
+      console.log('Confirmation result type:', typeof confirmation);
+      console.log('Confirmation result keys:', Object.keys(confirmation || {}));
+      console.log('Confirmation verificationId:', confirmation?.verificationId);
+      
+      if (confirmation && confirmation.verificationId) {
+        console.log('✅ OTP sent successfully! Setting confirmation result and moving to step 3');
+        setConfirmationResult(confirmation);
+        console.log('About to set step to 3...');
+        setStep(3);
+        console.log('Step set to 3 completed');
+      } else {
+        console.error('❌ Invalid confirmation result:', confirmation);
+        throw new Error('Failed to get valid confirmation result from Firebase');
+      }
     } catch (error) {
-      console.error('Phone verification error:', error);
+      console.error('❌ Phone verification error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      console.error('Full error object:', error);
+      
       let errorMessage = 'Failed to send OTP';
       
       if (error.code === 'auth/invalid-phone-number') {
@@ -113,6 +139,7 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
       
       setError(errorMessage);
     } finally {
+      console.log('=== PHONE VERIFICATION END ===');
       setLoading(false);
     }
   };
@@ -120,30 +147,75 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
   const handleOtpVerification = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
     try {
+      console.log('=== OTP VERIFICATION START ===');
+      console.log('OTP entered:', otp);
+      console.log('Confirmation result available:', !!confirmationResult);
+      console.log('Session ID:', sessionId);
+      
+      if (!confirmationResult) {
+        throw new Error('No confirmation result available. Please try sending OTP again.');
+      }
+      
+      if (!otp || otp.length !== 6) {
+        throw new Error('Please enter a valid 6-digit OTP.');
+      }
+      
+      console.log('Verifying OTP with Firebase...');
       // Verify OTP with Firebase
       const result = await confirmationResult.confirm(otp);
-      const firebaseToken = await result.user.getIdToken();
+      console.log('Firebase OTP verification successful');
+      console.log('Firebase user:', result.user.uid);
       
+      const firebaseToken = await result.user.getIdToken();
+      console.log('Firebase token obtained, length:', firebaseToken.length);
+      
+      console.log('Sending verification to backend...');
       // Verify with backend
       const response = await axios.post(`${config.API_BASE_URL}/verify-phone-login`, {
         sessionId,
         firebaseToken
       });
       
+      console.log('Backend verification successful');
+      console.log('User data received:', response.data.user);
+      
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      console.log('Login successful, calling onLogin...');
       onLogin(response.data.user);
     } catch (error) {
-      setError(error.response?.data?.error || 'OTP verification failed');
+      console.error('OTP verification error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      
+      let errorMessage = 'OTP verification failed';
+      if (error.code === 'auth/invalid-verification-code') {
+        errorMessage = 'Invalid OTP. Please check and try again.';
+      } else if (error.code === 'auth/code-expired') {
+        errorMessage = 'OTP has expired. Please request a new one.';
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
     } finally {
+      console.log('=== OTP VERIFICATION END ===');
       setLoading(false);
     }
   };
 
   // Step 2: Phone Input
   if (step === 2) {
+    console.log('=== RENDERING PHONE INPUT STEP ===');
+    console.log('Current step:', step);
+    console.log('Session ID:', sessionId);
+    
     return (
       <div className="auth-container">
         <div className="auth-card">
@@ -157,16 +229,20 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
               value={formData.phone}
               onChange={handleInputChange}
               required
+              autoFocus
             />
             <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
               Format: +91xxxxxxxxxx (e.g., +919876543210)
             </div>
             <div id="recaptcha-container"></div>
             {error && <div className="error">{error}</div>}
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || !formData.phone}>
               {loading ? 'Sending OTP...' : 'Send OTP'}
             </button>
           </form>
+          <div style={{ fontSize: '10px', color: '#999', marginTop: '10px' }}>
+            Debug: Step={step}, reCAPTCHA={!!recaptchaVerifier}
+          </div>
         </div>
       </div>
     );
@@ -174,25 +250,53 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
 
   // Step 3: OTP Verification
   if (step === 3) {
+    console.log('=== RENDERING OTP STEP ===');
+    console.log('Current step:', step);
+    console.log('Phone number:', formData.phone);
+    console.log('Confirmation result available:', !!confirmationResult);
+    console.log('OTP value:', otp);
+    
     return (
       <div className="auth-container">
         <div className="auth-card">
           <h2>SMS Verification</h2>
           <p>We've sent an OTP to {formData.phone}</p>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+            Check your phone for a 6-digit verification code
+          </div>
           <form onSubmit={handleOtpVerification}>
             <input
               type="text"
               placeholder="Enter 6-digit OTP"
               value={otp}
-              onChange={(e) => setOtp(e.target.value)}
+              onChange={(e) => {
+                console.log('OTP input changed:', e.target.value);
+                setOtp(e.target.value);
+              }}
               maxLength="6"
               required
+              autoFocus
             />
             {error && <div className="error">{error}</div>}
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || !otp || otp.length !== 6}>
               {loading ? 'Verifying...' : 'Verify OTP'}
             </button>
+            <button 
+              type="button" 
+              onClick={() => {
+                console.log('Back to phone input clicked');
+                setStep(2);
+                setOtp('');
+                setError('');
+              }}
+              style={{ marginTop: '10px', background: 'transparent', border: '1px solid #ccc' }}
+            >
+              Back to Phone Input
+            </button>
           </form>
+          <div style={{ fontSize: '10px', color: '#999', marginTop: '10px' }}>
+            Debug: Step={step}, ConfirmationResult={!!confirmationResult}
+          </div>
         </div>
       </div>
     );

@@ -47,7 +47,11 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
 
     return () => {
       if (recaptchaVerifier) {
-        recaptchaVerifier.clear();
+        try {
+          recaptchaVerifier.clear();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
         setRecaptchaVerifier(null);
       }
     };
