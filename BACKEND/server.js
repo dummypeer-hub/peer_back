@@ -3,8 +3,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-// Firebase Admin SDK will be used for SMS verification on frontend
-// Backend will store verification sessions
+// Email OTP authentication system using Mailjet
 const rateLimit = require('express-rate-limit');
 const axios = require('axios');
 const http = require('http');
@@ -72,14 +71,52 @@ const mailjet = require('node-mailjet').apiConnect(
 
 // Send OTP email
 const sendOTPEmail = async (email, otp, purpose) => {
-  const subject = purpose === 'signup' ? 'PeerSync - Email Verification' : 
-                  purpose === 'login' ? 'PeerSync - Login Verification' : 
-                  'PeerSync - Password Reset';
+  const subject = purpose === 'signup' ? 'PeerVerse - Account Verification' : 
+                  purpose === 'login' ? 'PeerVerse - Secure Login Code' : 
+                  'PeerVerse - Password Reset';
   
   const html = `
-    <h2>PeerSync ${purpose === 'signup' ? 'Email Verification' : purpose === 'login' ? 'Login Verification' : 'Password Reset'}</h2>
-    <p>Your OTP code is: <strong>${otp}</strong></p>
-    <p>This code will expire in 10 minutes.</p>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>PeerVerse Verification</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; text-align: center; color: white;">
+        <h1 style="margin: 0; font-size: 28px;">PeerVerse</h1>
+        <p style="margin: 10px 0 0 0; opacity: 0.9;">Your Mentorship Platform</p>
+      </div>
+      
+      <div style="padding: 30px; background: #f8f9fa; border-radius: 10px; margin-top: 20px;">
+        <h2 style="color: #333; margin-top: 0;">${purpose === 'signup' ? 'Welcome to PeerVerse!' : purpose === 'login' ? 'Secure Login Request' : 'Password Reset Request'}</h2>
+        
+        <p style="color: #666; line-height: 1.6;">
+          ${purpose === 'signup' ? 'Thank you for joining PeerVerse! To complete your account setup, please use the verification code below:' : 
+            purpose === 'login' ? 'We received a login request for your PeerVerse account. Please use the secure code below to continue:' : 
+            'You requested to reset your PeerVerse account password. Use the code below to proceed:'}
+        </p>
+        
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; border: 2px dashed #667eea;">
+          <p style="margin: 0; color: #999; font-size: 14px;">Your verification code</p>
+          <h1 style="margin: 10px 0; color: #667eea; font-size: 32px; letter-spacing: 5px; font-weight: bold;">${otp}</h1>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">
+          <strong>Important:</strong> This code will expire in 10 minutes for your security.
+        </p>
+        
+        <p style="color: #666; font-size: 14px;">
+          If you didn't request this code, please ignore this email or contact our support team.
+        </p>
+      </div>
+      
+      <div style="text-align: center; margin-top: 30px; color: #999; font-size: 12px;">
+        <p>This is an automated message from PeerVerse. Please do not reply to this email.</p>
+        <p>© 2024 PeerVerse. All rights reserved.</p>
+      </div>
+    </body>
+    </html>
   `;
 
   const request = mailjet.post('send', { version: 'v3.1' }).request({
@@ -87,15 +124,24 @@ const sendOTPEmail = async (email, otp, purpose) => {
       {
         From: {
           Email: process.env.MAILJET_SENDER_EMAIL,
-          Name: 'PeerSync'
+          Name: 'PeerVerse Security'
         },
         To: [
           {
-            Email: email
+            Email: email,
+            Name: 'PeerVerse User'
           }
         ],
         Subject: subject,
-        HTMLPart: html
+        HTMLPart: html,
+        TextPart: `PeerVerse Verification Code: ${otp}. This code expires in 10 minutes. If you didn't request this, please ignore this email.`,
+        Headers: {
+          'X-Mailjet-Campaign': 'peerverse-auth',
+          'X-MC-Tags': 'authentication,otp,security',
+          'List-Unsubscribe': '<mailto:unsubscribe@peerverse.in>',
+          'X-Priority': '1',
+          'Importance': 'high'
+        }
       }
     ]
   });
@@ -250,26 +296,9 @@ app.get('/api/turn-credentials', async (req, res) => {
 // Generate OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-// SMS OTP will be handled by Firebase on frontend
-// Backend stores verification sessions
-const verificationSessions = new Map();
 
-const createVerificationSession = (phone, purpose) => {
-  const sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-  verificationSessions.set(sessionId, {
-    phone,
-    purpose,
-    createdAt: Date.now(),
-    verified: false
-  });
-  
-  // Clean up expired sessions (10 minutes)
-  setTimeout(() => {
-    verificationSessions.delete(sessionId);
-  }, 10 * 60 * 1000);
-  
-  return sessionId;
-};
+
+
 
 // Check username availability
 app.post('/api/check-username', async (req, res) => {
@@ -311,11 +340,22 @@ app.post('/api/signup', async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create verification session for SMS OTP
-    const sessionId = createVerificationSession(phone, 'signup');
+    // Generate and send OTP
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    
+    // Store OTP in database
+    await pool.query(
+      'INSERT INTO otp_codes (email, otp_code, purpose, expires_at) VALUES ($1, $2, $3, $4)',
+      [email, otp, 'signup', expiresAt]
+    );
+    
+    // Send OTP via email
+    await sendOTPEmail(email, otp, 'signup');
     
     // Store temp user data
     const tempUserId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const sessionId = 'signup_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     
     // Store in cache temporarily
     setCache(`temp_user_${tempUserId}`, {
@@ -338,12 +378,12 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Verify SMS OTP for signup
+// Verify email OTP for signup
 app.post('/api/verify-signup', async (req, res) => {
   try {
-    const { tempUserId, firebaseToken } = req.body;
+    const { tempUserId, otp } = req.body;
     
-    if (!tempUserId || !firebaseToken) {
+    if (!tempUserId || !otp) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -353,8 +393,18 @@ app.post('/api/verify-signup', async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired session' });
     }
     
-    // Verify Firebase token (you can add additional verification here)
-    // For now, we trust the frontend Firebase verification
+    // Verify OTP
+    const otpResult = await pool.query(
+      'SELECT * FROM otp_codes WHERE email = $1 AND otp_code = $2 AND purpose = $3 AND expires_at > NOW() AND is_used = FALSE',
+      [tempUserData.email, otp, 'signup']
+    );
+    
+    if (otpResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+    
+    // Mark OTP as used
+    await pool.query('UPDATE otp_codes SET is_used = TRUE WHERE id = $1', [otpResult.rows[0].id]);
     
     const { username, email, phone, hashedPassword, role } = tempUserData;
     
@@ -419,7 +469,20 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
-    // Store user data for phone verification step
+    // Generate and send OTP
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    
+    // Store OTP in database
+    await pool.query(
+      'INSERT INTO otp_codes (email, otp_code, purpose, expires_at) VALUES ($1, $2, $3, $4)',
+      [user.email, otp, 'login', expiresAt]
+    );
+    
+    // Send OTP via email
+    await sendOTPEmail(user.email, otp, 'login');
+    
+    // Store user data for verification step
     const sessionId = 'login_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     setCache(`login_session_${sessionId}`, {
       userId: user.id,
@@ -429,16 +492,65 @@ app.post('/api/login', async (req, res) => {
       role: user.role
     });
     
-    console.log('Login session created:', sessionId);
+    console.log('Login OTP sent and session created:', sessionId);
     
     res.json({ 
       sessionId,
       userId: user.id,
-      requiresPhoneVerification: true
+      requiresEmailVerification: true
     });
   } catch (error) {
     console.error('Login error details:', error);
     res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Verify email OTP for login
+app.post('/api/verify-email-otp-login', async (req, res) => {
+  try {
+    const { sessionId, otp } = req.body;
+    
+    if (!sessionId || !otp) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Get user data from session
+    const userData = getFromCache(`login_session_${sessionId}`);
+    if (!userData) {
+      return res.status(400).json({ error: 'Invalid or expired session' });
+    }
+    
+    // Verify OTP
+    const otpResult = await pool.query(
+      'SELECT * FROM otp_codes WHERE email = $1 AND otp_code = $2 AND purpose = $3 AND expires_at > NOW() AND is_used = FALSE',
+      [userData.email, otp, 'login']
+    );
+    
+    if (otpResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+    
+    // Mark OTP as used
+    await pool.query('UPDATE otp_codes SET is_used = TRUE WHERE id = $1', [otpResult.rows[0].id]);
+    
+    // Create JWT token
+    const token = jwt.sign({ userId: userData.userId, role: userData.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    // Clear session data
+    cache.delete(`login_session_${sessionId}`);
+    
+    const user = {
+      id: userData.userId,
+      username: userData.username,
+      email: userData.email,
+      phone: userData.phone,
+      role: userData.role
+    };
+    
+    res.json({ token, user });
+  } catch (error) {
+    console.error('Email OTP verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
   }
 });
 

@@ -1,7 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
-import { auth } from '../firebase';
 import config from '../config';
 import './Auth.css';
 
@@ -17,45 +15,9 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
   const [otp, setOtp] = useState('');
   const [tempUserId, setTempUserId] = useState('');
   const [sessionId, setSessionId] = useState('');
-  const [confirmationResult, setConfirmationResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [usernameAvailable, setUsernameAvailable] = useState(null);
-  const [recaptchaVerifier, setRecaptchaVerifier] = useState(null);
-
-  useEffect(() => {
-    // Initialize reCAPTCHA only when needed (step 2)
-    if (step === 2) {
-      try {
-        setTimeout(() => {
-          const element = document.getElementById('recaptcha-container-signup');
-          if (element && !recaptchaVerifier) {
-            const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-signup', {
-              size: 'invisible',
-              callback: () => {
-                console.log('reCAPTCHA solved');
-              }
-            });
-            setRecaptchaVerifier(verifier);
-            console.log('reCAPTCHA verifier initialized successfully for signup');
-          }
-        }, 100);
-      } catch (error) {
-        console.error('Failed to initialize reCAPTCHA for signup:', error);
-      }
-    }
-
-    return () => {
-      if (recaptchaVerifier) {
-        try {
-          recaptchaVerifier.clear();
-        } catch (error) {
-          // Ignore cleanup errors
-        }
-        setRecaptchaVerifier(null);
-      }
-    };
-  }, [step, recaptchaVerifier]);
 
   const handleRoleSelect = (role) => {
     setFormData({ ...formData, role });
@@ -90,58 +52,13 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setError('');
 
     try {
-      // Clean and format phone number
-      let cleanPhone = formData.phone.replace(/\s+/g, '').replace(/[^+\d]/g, '');
-      if (!cleanPhone.startsWith('+91')) {
-        cleanPhone = cleanPhone.startsWith('+') ? cleanPhone : `+91${cleanPhone}`;
-      }
-      
-      // Validate phone number format
-      const phoneRegex = /^\+91[6-9]\d{9}$/;
-      if (!phoneRegex.test(cleanPhone)) {
-        throw new Error('Invalid phone number. Please enter a valid Indian mobile number (10 digits starting with 6-9)');
-      }
-      
-      console.log('Original phone input:', formData.phone);
-      console.log('Cleaned phone number:', cleanPhone);
-      const phoneNumber = cleanPhone;
-      
-      // Create signup session
-      const response = await axios.post(`${config.API_BASE_URL}/signup`, {
-        ...formData,
-        phone: phoneNumber
-      });
+      const response = await axios.post(`${config.API_BASE_URL}/signup`, formData);
       
       setTempUserId(response.data.tempUserId);
       setSessionId(response.data.sessionId);
-      
-      // Send SMS OTP via Firebase
-      if (!recaptchaVerifier) {
-        throw new Error('reCAPTCHA not initialized. Please refresh the page.');
-      }
-      
-      console.log('Attempting to send OTP to:', phoneNumber);
-      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-      console.log('OTP sent successfully for signup, confirmation result:', !!confirmation);
-      setConfirmationResult(confirmation);
       setStep(3);
     } catch (error) {
-      console.error('Signup error:', error);
-      let errorMessage = 'Signup failed';
-      
-      if (error.code === 'auth/invalid-phone-number') {
-        errorMessage = 'Invalid phone number format. Please use +91xxxxxxxxxx format.';
-      } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many requests. Please try again later.';
-      } else if (error.code === 'auth/captcha-check-failed') {
-        errorMessage = 'Captcha verification failed. Please refresh and try again.';
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      setError(errorMessage);
+      setError(error.response?.data?.error || 'Signup failed');
     } finally {
       setLoading(false);
     }
@@ -152,14 +69,9 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setLoading(true);
 
     try {
-      // Verify OTP with Firebase
-      const result = await confirmationResult.confirm(otp);
-      const firebaseToken = await result.user.getIdToken();
-      
-      // Verify with backend
       const response = await axios.post(`${config.API_BASE_URL}/verify-signup`, {
         tempUserId,
-        firebaseToken
+        otp
       });
       
       localStorage.setItem('token', response.data.token);
@@ -177,16 +89,16 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h1>PeerSync</h1>
+          <h1>PeerVerse</h1>
           <h2>Choose Your Role</h2>
           <div className="role-selection">
             <div className="role-card" onClick={() => handleRoleSelect('mentor')}>
-              <div className="role-emoji">👨‍🏫</div>
+              <div className="role-emoji">👨🏫</div>
               <h3>Mentor</h3>
               <p>Share your knowledge and guide others</p>
             </div>
             <div className="role-card" onClick={() => handleRoleSelect('mentee')}>
-              <div className="role-emoji">👨‍🎓</div>
+              <div className="role-emoji">👨🎓</div>
               <h3>Mentee</h3>
               <p>Learn from experienced mentors</p>
             </div>
@@ -204,8 +116,11 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h2>Phone Verification</h2>
-          <p>We've sent an OTP to {formData.phone}</p>
+          <h2>Email Verification</h2>
+          <p>We've sent a verification code to {formData.email}</p>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+            Check your email for a 6-digit verification code from PeerVerse
+          </div>
           <form onSubmit={handleOtpVerification}>
             <input
               type="text"
@@ -215,7 +130,6 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
               maxLength="6"
               required
             />
-            <div id="recaptcha-container-signup"></div>
             {error && <div className="error">{error}</div>}
             <button type="submit" disabled={loading}>
               {loading ? 'Verifying...' : 'Verify & Complete Signup'}
@@ -230,8 +144,8 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>PeerSync</h1>
-        <h2>Sign Up as {formData.role === 'mentor' ? '👨‍🏫 Mentor' : '👨‍🎓 Mentee'}</h2>
+        <h1>PeerVerse</h1>
+        <h2>Sign Up as {formData.role === 'mentor' ? '👨🏫 Mentor' : '👨🎓 Mentee'}</h2>
         <form onSubmit={handleSignup}>
           <div className="username-field">
             <input
@@ -261,15 +175,11 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
           <input
             type="tel"
             name="phone"
-            placeholder="Phone Number (+91xxxxxxxxxx)"
+            placeholder="Phone Number"
             value={formData.phone}
             onChange={handleInputChange}
             required
           />
-          <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-            Format: +91xxxxxxxxxx (e.g., +919876543210)
-          </div>
-          <div id="recaptcha-container-signup"></div>
           <input
             type="password"
             name="password"
@@ -292,7 +202,6 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
           <button onClick={() => setStep(1)} className="link-btn">
             Back to Role Selection
           </button>
-
           <button onClick={onSwitchToLogin} className="link-btn">
             Already have an account? Sign In
           </button>

@@ -40,8 +40,7 @@ const LandingPage = ({ onLogin, onSignup }) => {
               Connect. Learn. <span className="highlight">Grow Together.</span>
             </h1>
             <p className="hero-subtitle">
-              Join PeerVerse - the ultimate mentorship platform where knowledge meets opportunity. 
-              Connect with industry experts or share your expertise with aspiring professionals.
+              PeerVerse connects you with peers who've walked your path. Get real insights from people who've faced the same challenges, overcome similar obstacles, and achieved what you're striving for - all at reasonable rates from those who truly understand your journey.
             </p>
             <div className="hero-buttons">
               <button onClick={() => openAuth('signup')} className="btn-primary">
@@ -68,23 +67,7 @@ const LandingPage = ({ onLogin, onSignup }) => {
           </div>
           <div className="hero-image">
             <div className="hero-visual">
-              <div className="video-call-mockup">
-                <div className="video-frame">
-                  <div className="video-placeholder mentor">
-                    <div className="avatar">👨‍💼</div>
-                    <span>Mentor</span>
-                  </div>
-                  <div className="video-placeholder mentee">
-                    <div className="avatar">👩‍🎓</div>
-                    <span>Mentee</span>
-                  </div>
-                </div>
-                <div className="call-controls">
-                  <div className="control-dot"></div>
-                  <div className="control-dot"></div>
-                  <div className="control-dot"></div>
-                </div>
-              </div>
+              <img src="/finall_logo_verse.png" alt="PeerVerse Logo" className="hero-logo" />
             </div>
           </div>
         </div>
@@ -94,6 +77,13 @@ const LandingPage = ({ onLogin, onSignup }) => {
       <section id="features" className="features">
         <div className="container">
           <h2 className="section-title">Why Choose PeerVerse?</h2>
+          <p className="section-description">
+            PeerVerse is built on the belief that the best advice comes from those who've been in your shoes. 
+            Our platform connects you with peers who have faced similar challenges, navigated the same career paths, 
+            and overcome obstacles you're currently facing. Get authentic insights, practical solutions, and genuine 
+            support from people who truly understand your situation - all at affordable rates that make quality 
+            mentorship accessible to everyone.
+          </p>
           <div className="features-grid">
             <div className="feature-card">
               <div className="feature-icon">🎥</div>
@@ -171,40 +161,39 @@ const LandingPage = ({ onLogin, onSignup }) => {
         <div className="container">
           <h2 className="section-title">Meet Our Team</h2>
           <div className="team-grid">
-            <div className="team-member">
+            <div className="team-member founder">
               <div className="member-photo">
-                <div className="member-avatar">JS</div>
+                <img src="/nkphoto.jpg" alt="Ninad Santosh Khopade" className="member-image" />
               </div>
-              <h3>John Smith</h3>
-              <p className="member-title">Founder & CEO</p>
+              <h3>Ninad Santosh Khopade</h3>
+              <p className="member-title">Founder & Full Stack Developer</p>
               <p className="member-bio">
-                Former Google engineer with 10+ years in EdTech. Passionate about democratizing mentorship.
+                BTech in CSE from MIT ADT. Passionate about connecting peers through technology and creating meaningful mentorship experiences.
               </p>
-              <div className="member-links">
-                <a href="https://linkedin.com/in/johnsmith" target="_blank" rel="noopener noreferrer">
-                  <i className="fab fa-linkedin"></i>
-                </a>
-                <a href="https://twitter.com/johnsmith" target="_blank" rel="noopener noreferrer">
-                  <i className="fab fa-twitter"></i>
-                </a>
-              </div>
             </div>
-            <div className="team-member">
-              <div className="member-photo">
-                <div className="member-avatar">SJ</div>
-              </div>
-              <h3>Sarah Johnson</h3>
-              <p className="member-title">Co-Founder & CTO</p>
-              <p className="member-bio">
-                MIT graduate and former Microsoft architect. Expert in scalable systems and AI technologies.
-              </p>
-              <div className="member-links">
-                <a href="https://linkedin.com/in/sarahjohnson" target="_blank" rel="noopener noreferrer">
-                  <i className="fab fa-linkedin"></i>
-                </a>
-                <a href="https://github.com/sarahjohnson" target="_blank" rel="noopener noreferrer">
-                  <i className="fab fa-github"></i>
-                </a>
+            <div className="contributors-section">
+              <h3 className="contributors-title">Contributors</h3>
+              <div className="contributors-grid">
+                <div className="team-member">
+                  <div className="member-photo">
+                    <img src="/shreephoto.jpg" alt="Shreeja Shivaprakash Gundlur" className="member-image" />
+                  </div>
+                  <h3>Shreeja Shivaprakash Gundlur</h3>
+                  <p className="member-title">Digital Marketing Manager & Cybersecurity Engineer</p>
+                  <p className="member-bio">
+                    BTech CSE from MIT ADT. Expert in digital marketing strategies and cybersecurity solutions.
+                  </p>
+                </div>
+                <div className="team-member">
+                  <div className="member-photo">
+                    <img src="/yashphoto.jpg" alt="Yash Sanjay Bhardwaj" className="member-image" />
+                  </div>
+                  <h3>Yash Sanjay Bhardwaj</h3>
+                  <p className="member-title">Frontend Developer</p>
+                  <p className="member-bio">
+                    BTech from MIT ADT University. Specializes in creating intuitive user interfaces and seamless user experiences.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
