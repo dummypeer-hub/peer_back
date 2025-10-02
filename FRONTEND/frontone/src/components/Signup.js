@@ -196,6 +196,11 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
           <button onClick={() => setStep(1)} className="link-btn">
             Back to Role Selection
           </button>
+          {onBack && (
+            <button onClick={onBack} className="link-btn">
+              Back to Home
+            </button>
+          )}
           <button onClick={onSwitchToLogin} className="link-btn">
             Already have an account? Sign In
           </button>

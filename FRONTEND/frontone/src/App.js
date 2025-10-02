@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import axios from 'axios';
 import config from './config';
+import LandingPage from './components/LandingPage';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import ForgotPassword from './components/ForgotPassword';
@@ -14,7 +15,7 @@ import VideoCallPage from './components/VideoCallPage';
 import './App.css';
 
 function App() {
-  const [currentView, setCurrentView] = useState('login');
+  const [currentView, setCurrentView] = useState('landing');
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -76,17 +77,25 @@ function App() {
     localStorage.removeItem('user');
     localStorage.removeItem('currentSession');
     setUser(null);
-    setCurrentView('login');
+    setCurrentView('landing');
   };
 
   const renderCurrentView = () => {
     switch (currentView) {
+      case 'landing':
+        return (
+          <LandingPage
+            onLogin={() => setCurrentView('login')}
+            onSignup={() => setCurrentView('signup')}
+          />
+        );
       case 'login':
         return (
           <Login
             onLogin={handleLogin}
             onSwitchToSignup={() => setCurrentView('signup')}
             onForgotPassword={() => setCurrentView('forgot-password')}
+            onBack={() => setCurrentView('landing')}
           />
         );
       case 'signup':
@@ -94,6 +103,7 @@ function App() {
           <Signup
             onSignup={handleSignup}
             onSwitchToLogin={() => setCurrentView('login')}
+            onBack={() => setCurrentView('landing')}
           />
         );
       case 'forgot-password':

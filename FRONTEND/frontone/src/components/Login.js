@@ -3,7 +3,7 @@ import axios from 'axios';
 import config from '../config';
 import './Auth.css';
 
-const Login = ({ onLogin, onSwitchToSignup, onForgotPassword }) => {
+const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -85,7 +85,12 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword }) => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>PeerSync</h1>
+        {onBack && (
+          <button onClick={onBack} className="back-btn">
+            ← Back to Home
+          </button>
+        )}
+        <h1>PeerVerse</h1>
         <h2>Sign In</h2>
         <form onSubmit={handleLogin}>
           <select
