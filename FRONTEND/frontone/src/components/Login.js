@@ -98,12 +98,33 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
         throw new Error('reCAPTCHA not initialized. Please refresh the page.');
       }
 
-      const phoneNumber = formData.phone.startsWith('+') ? formData.phone : `+91${formData.phone}`;
-      console.log('Formatted phone number:', phoneNumber);
+      // Clean and format phone number
+      let cleanPhone = formData.phone.replace(/\s+/g, '').replace(/[^+\d]/g, '');
+      if (!cleanPhone.startsWith('+91')) {
+        cleanPhone = cleanPhone.startsWith('+') ? cleanPhone : `+91${cleanPhone}`;
+      }
+      
+      // Validate phone number format
+      const phoneRegex = /^\+91[6-9]\d{9}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        throw new Error('Invalid phone number. Please enter a valid Indian mobile number (10 digits starting with 6-9)');
+      }
+      
+      console.log('Original phone input:', formData.phone);
+      console.log('Cleaned phone number:', cleanPhone);
+      const phoneNumber = cleanPhone;
       console.log('Attempting to send OTP via Firebase...');
+      console.log('Firebase Auth currentUser before SMS:', auth.currentUser);
       
       // Send SMS OTP via Firebase
       const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      
+      // Check if this is a test phone number
+      if (phoneNumber === '+911234567890' || phoneNumber === '+916505553434') {
+        console.log('⚠️ WARNING: Using test phone number - no real SMS will be sent');
+      } else {
+        console.log('📱 Real phone number detected - SMS should be sent to:', phoneNumber);
+      }
       console.log('Firebase signInWithPhoneNumber completed');
       console.log('Confirmation result type:', typeof confirmation);
       console.log('Confirmation result keys:', Object.keys(confirmation || {}));

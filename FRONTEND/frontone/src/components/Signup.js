@@ -90,8 +90,21 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setError('');
 
     try {
-      // Format phone number
-      const phoneNumber = formData.phone.startsWith('+') ? formData.phone : `+91${formData.phone}`;
+      // Clean and format phone number
+      let cleanPhone = formData.phone.replace(/\s+/g, '').replace(/[^+\d]/g, '');
+      if (!cleanPhone.startsWith('+91')) {
+        cleanPhone = cleanPhone.startsWith('+') ? cleanPhone : `+91${cleanPhone}`;
+      }
+      
+      // Validate phone number format
+      const phoneRegex = /^\+91[6-9]\d{9}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        throw new Error('Invalid phone number. Please enter a valid Indian mobile number (10 digits starting with 6-9)');
+      }
+      
+      console.log('Original phone input:', formData.phone);
+      console.log('Cleaned phone number:', cleanPhone);
+      const phoneNumber = cleanPhone;
       
       // Create signup session
       const response = await axios.post(`${config.API_BASE_URL}/signup`, {
