@@ -360,7 +360,7 @@ app.post('/api/verify-signup', async (req, res) => {
     
     // Create user in database
     const result = await pool.query(
-      'INSERT INTO users (username, email, phone, password, role, verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, phone, role',
+      'INSERT INTO users (username, email, phone, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, phone, role',
       [username, email, phone, hashedPassword, role, true]
     );
     
@@ -394,7 +394,7 @@ app.post('/api/login', async (req, res) => {
     
     // Check if user exists and verify password
     const result = await pool.query(
-      'SELECT id, username, email, phone, password, role FROM users WHERE email = $1 AND role = $2',
+      'SELECT id, username, email, phone, password_hash, role FROM users WHERE email = $1 AND role = $2',
       [email, role]
     );
     
@@ -407,12 +407,12 @@ app.post('/api/login', async (req, res) => {
     const user = result.rows[0];
     
     // Check if password field exists and is not null
-    if (!user.password) {
+    if (!user.password_hash) {
       console.error('User password is null or undefined for user:', user.id);
       return res.status(400).json({ error: 'Account setup incomplete. Please contact support.' });
     }
     
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
     console.log('Password validation:', isValidPassword ? 'Valid' : 'Invalid');
     
     if (!isValidPassword) {
