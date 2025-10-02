@@ -1,19 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { auth } from '../firebase';
 import config from '../config';
 import './Auth.css';
 
 const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
+    phone: '',
     role: ''
   });
   const [otp, setOtp] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
-  const [userId, setUserId] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [confirmationResult, setConfirmationResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [recaptchaVerifier, setRecaptchaVerifier] = useState(null);
+
+  useEffect(() => {
+    // Initialize reCAPTCHA
+    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+      size: 'invisible',
+      callback: () => {
+        console.log('reCAPTCHA solved');
+      }
+    });
+    setRecaptchaVerifier(verifier);
+
+    return () => {
+      if (verifier) {
+        verifier.clear();
+      }
+    };
+  }, []);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -26,12 +46,24 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
     setError('');
 
     try {
-      const response = await axios.post(`${config.API_BASE_URL}/login`, formData);
-      setUserId(response.data.userId);
+      // Format phone number
+      const phoneNumber = formData.phone.startsWith('+') ? formData.phone : `+91${formData.phone}`;
+      
+      // Check if user exists
+      const response = await axios.post(`${config.API_BASE_URL}/login`, {
+        phone: phoneNumber,
+        role: formData.role
+      });
+      
+      setSessionId(response.data.sessionId);
+      
+      // Send SMS OTP via Firebase
+      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      setConfirmationResult(confirmation);
       setShowOtpInput(true);
       setError('');
     } catch (error) {
-      setError(error.response?.data?.error || 'Login failed');
+      setError(error.response?.data?.error || error.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -42,9 +74,14 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
     setLoading(true);
 
     try {
+      // Verify OTP with Firebase
+      const result = await confirmationResult.confirm(otp);
+      const firebaseToken = await result.user.getIdToken();
+      
+      // Verify with backend
       const response = await axios.post(`${config.API_BASE_URL}/verify-login`, {
-        otp,
-        userId
+        sessionId,
+        firebaseToken
       });
       
       localStorage.setItem('token', response.data.token);
@@ -61,8 +98,8 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h2>Email Verification</h2>
-          <p>We've sent an OTP to your registered email</p>
+          <h2>SMS Verification</h2>
+          <p>We've sent an OTP to your phone number</p>
           <form onSubmit={handleOtpVerification}>
             <input
               type="text"
@@ -72,6 +109,7 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
               maxLength="6"
               required
             />
+            <div id="recaptcha-container"></div>
             {error && <div className="error">{error}</div>}
             <button type="submit" disabled={loading}>
               {loading ? 'Verifying...' : 'Verify OTP'}
@@ -104,21 +142,14 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
             <option value="mentee">👨🎓 Mentee</option>
           </select>
           <input
-            type="email"
-            name="email"
-            placeholder="Email"
-            value={formData.email}
+            type="tel"
+            name="phone"
+            placeholder="Phone Number (+91xxxxxxxxxx)"
+            value={formData.phone}
             onChange={handleInputChange}
             required
           />
-          <input
-            type="password"
-            name="password"
-            placeholder="Password"
-            value={formData.password}
-            onChange={handleInputChange}
-            required
-          />
+          <div id="recaptcha-container"></div>
           {error && <div className="error">{error}</div>}
           <button type="submit" disabled={loading} className="primary-btn">
             {loading ? 'Signing In...' : 'Sign In'}

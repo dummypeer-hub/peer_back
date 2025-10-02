@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { auth } from '../firebase';
 import config from '../config';
 import './Auth.css';
 
@@ -14,9 +16,29 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
   });
   const [otp, setOtp] = useState('');
   const [tempUserId, setTempUserId] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [usernameAvailable, setUsernameAvailable] = useState(null);
+  const [recaptchaVerifier, setRecaptchaVerifier] = useState(null);
+
+  useEffect(() => {
+    // Initialize reCAPTCHA
+    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-signup', {
+      size: 'invisible',
+      callback: () => {
+        console.log('reCAPTCHA solved');
+      }
+    });
+    setRecaptchaVerifier(verifier);
+
+    return () => {
+      if (verifier) {
+        verifier.clear();
+      }
+    };
+  }, []);
 
   const handleRoleSelect = (role) => {
     setFormData({ ...formData, role });
@@ -51,11 +73,24 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setError('');
 
     try {
-      const response = await axios.post(`${config.API_BASE_URL}/signup`, formData);
+      // Format phone number
+      const phoneNumber = formData.phone.startsWith('+') ? formData.phone : `+91${formData.phone}`;
+      
+      // Create signup session
+      const response = await axios.post(`${config.API_BASE_URL}/signup`, {
+        ...formData,
+        phone: phoneNumber
+      });
+      
       setTempUserId(response.data.tempUserId);
+      setSessionId(response.data.sessionId);
+      
+      // Send SMS OTP via Firebase
+      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      setConfirmationResult(confirmation);
       setStep(3);
     } catch (error) {
-      setError(error.response?.data?.error || 'Signup failed');
+      setError(error.response?.data?.error || error.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
@@ -66,9 +101,14 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setLoading(true);
 
     try {
+      // Verify OTP with Firebase
+      const result = await confirmationResult.confirm(otp);
+      const firebaseToken = await result.user.getIdToken();
+      
+      // Verify with backend
       const response = await axios.post(`${config.API_BASE_URL}/verify-signup`, {
-        otp,
-        tempUserId
+        tempUserId,
+        firebaseToken
       });
       
       localStorage.setItem('token', response.data.token);
@@ -113,8 +153,8 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h2>Email Verification</h2>
-          <p>We've sent an OTP to {formData.email}</p>
+          <h2>SMS Verification</h2>
+          <p>We've sent an OTP to {formData.phone}</p>
           <form onSubmit={handleOtpVerification}>
             <input
               type="text"
@@ -124,6 +164,7 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
               maxLength="6"
               required
             />
+            <div id="recaptcha-container-signup"></div>
             {error && <div className="error">{error}</div>}
             <button type="submit" disabled={loading}>
               {loading ? 'Verifying...' : 'Verify & Complete Signup'}
@@ -169,11 +210,12 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
           <input
             type="tel"
             name="phone"
-            placeholder="Phone Number"
+            placeholder="Phone Number (+91xxxxxxxxxx)"
             value={formData.phone}
             onChange={handleInputChange}
             required
           />
+          <div id="recaptcha-container-signup"></div>
           <input
             type="password"
             name="password"

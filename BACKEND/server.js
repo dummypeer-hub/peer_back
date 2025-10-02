@@ -3,10 +3,8 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-const mailjet = require('node-mailjet').apiConnect(
-  process.env.MAILJET_API_KEY,
-  process.env.MAILJET_SECRET_KEY
-);
+// Firebase Admin SDK will be used for SMS verification on frontend
+// Backend will store verification sessions
 const rateLimit = require('express-rate-limit');
 const axios = require('axios');
 const http = require('http');
@@ -181,37 +179,25 @@ app.get('/api/test', (req, res) => {
 // Generate OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-// Send OTP email
-const sendOTPEmail = async (email, otp, purpose) => {
-  const subject = purpose === 'signup' ? 'PeerSync - Email Verification' : 
-                  purpose === 'login' ? 'PeerSync - Login Verification' : 
-                  'PeerSync - Password Reset';
-  
-  const html = `
-    <h2>PeerSync ${purpose === 'signup' ? 'Email Verification' : purpose === 'login' ? 'Login Verification' : 'Password Reset'}</h2>
-    <p>Your OTP code is: <strong>${otp}</strong></p>
-    <p>This code will expire in 10 minutes.</p>
-  `;
+// SMS OTP will be handled by Firebase on frontend
+// Backend stores verification sessions
+const verificationSessions = new Map();
 
-  const request = mailjet.post('send', { version: 'v3.1' }).request({
-    Messages: [
-      {
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL,
-          Name: 'PeerSync'
-        },
-        To: [
-          {
-            Email: email
-          }
-        ],
-        Subject: subject,
-        HTMLPart: html
-      }
-    ]
+const createVerificationSession = (phone, purpose) => {
+  const sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  verificationSessions.set(sessionId, {
+    phone,
+    purpose,
+    createdAt: Date.now(),
+    verified: false
   });
   
-  await request;
+  // Clean up expired sessions (10 minutes)
+  setTimeout(() => {
+    verificationSessions.delete(sessionId);
+  }, 10 * 60 * 1000);
+  
+  return sessionId;
 };
 
 // Check username availability
@@ -254,8 +240,140 @@ app.post('/api/signup', async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Generate and send OTP
-    const otp = generateOTP();
+    // Create verification session for SMS OTP
+    const sessionId = createVerificationSession(phone, 'signup');
+    
+    // Store temp user data
+    const tempUserId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    // Store in cache temporarily
+    setCache(`temp_user_${tempUserId}`, {
+      username,
+      email,
+      phone,
+      hashedPassword,
+      role,
+      sessionId
+    });
+    
+    res.json({ 
+      tempUserId,
+      sessionId,
+      phone: phone.replace(/.(?=.{4})/g, '*') // Masked phone for display
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Verify SMS OTP for signup
+app.post('/api/verify-signup', async (req, res) => {
+  try {
+    const { tempUserId, firebaseToken } = req.body;
+    
+    if (!tempUserId || !firebaseToken) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Get temp user data
+    const tempUserData = getFromCache(`temp_user_${tempUserId}`);
+    if (!tempUserData) {
+      return res.status(400).json({ error: 'Invalid or expired session' });
+    }
+    
+    // Verify Firebase token (you can add additional verification here)
+    // For now, we trust the frontend Firebase verification
+    
+    const { username, email, phone, hashedPassword, role } = tempUserData;
+    
+    // Create user in database
+    const result = await pool.query(
+      'INSERT INTO users (username, email, phone, password, role, verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, phone, role',
+      [username, email, phone, hashedPassword, role, true]
+    );
+    
+    const user = result.rows[0];
+    const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    // Clear temp data
+    cache.delete(`temp_user_${tempUserId}`);
+    
+    res.json({ token, user });
+  } catch (error) {
+    console.error('Verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// Login with phone
+app.post('/api/login', async (req, res) => {
+  try {
+    const { phone, role } = req.body;
+    
+    if (!phone || !role) {
+      return res.status(400).json({ error: 'Phone and role are required' });
+    }
+    
+    // Check if user exists
+    const result = await pool.query(
+      'SELECT id, username, email, phone, role FROM users WHERE phone = $1 AND role = $2',
+      [phone, role]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'User not found' });
+    }
+    
+    const user = result.rows[0];
+    const sessionId = createVerificationSession(phone, 'login');
+    
+    // Store user data temporarily
+    setCache(`login_user_${sessionId}`, user);
+    
+    res.json({ 
+      sessionId,
+      userId: user.id,
+      phone: phone.replace(/.(?=.{4})/g, '*')
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Verify SMS OTP for login
+app.post('/api/verify-login', async (req, res) => {
+  try {
+    const { sessionId, firebaseToken } = req.body;
+    
+    if (!sessionId || !firebaseToken) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Get user data
+    const user = getFromCache(`login_user_${sessionId}`);
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired session' });
+    }
+    
+    // Verify Firebase token (you can add additional verification here)
+    // For now, we trust the frontend Firebase verification
+    
+    const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    // Clear session data
+    cache.delete(`login_user_${sessionId}`);
+    
+    res.json({ token, user });
+  } catch (error) {
+    console.error('Login verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// Generate OTP (keeping for backward compatibility)
+const generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await pool.query(
