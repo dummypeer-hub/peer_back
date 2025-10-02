@@ -1,3 +1,11 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+
+# Sitemap
+Sitemap: https://peerverse.in/sitemap.xml
+
+# Disallow private areas
+Disallow: /api/
+Disallow: /admin/
+Disallow: /video-call/
+Disallow: /dashboard/private/
