@@ -25,19 +25,31 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
 
   useEffect(() => {
     // Initialize reCAPTCHA
-    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-signup', {
-      size: 'invisible',
-      callback: () => {
-        console.log('reCAPTCHA solved');
-      }
-    });
-    setRecaptchaVerifier(verifier);
+    try {
+      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-signup', {
+        size: 'invisible',
+        callback: () => {
+          console.log('reCAPTCHA solved');
+        },
+        'expired-callback': () => {
+          console.log('reCAPTCHA expired');
+        },
+        'error-callback': (error) => {
+          console.error('reCAPTCHA error:', error);
+        }
+      });
+      setRecaptchaVerifier(verifier);
+      console.log('reCAPTCHA verifier initialized successfully for signup');
 
-    return () => {
-      if (verifier) {
-        verifier.clear();
-      }
-    };
+      return () => {
+        if (verifier) {
+          verifier.clear();
+        }
+      };
+    } catch (error) {
+      console.error('Failed to initialize reCAPTCHA for signup:', error);
+      setError('Failed to initialize phone verification. Please refresh the page.');
+    }
   }, []);
 
   const handleRoleSelect = (role) => {
@@ -86,11 +98,32 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
       setSessionId(response.data.sessionId);
       
       // Send SMS OTP via Firebase
+      if (!recaptchaVerifier) {
+        throw new Error('reCAPTCHA not initialized. Please refresh the page.');
+      }
+      
+      console.log('Attempting to send OTP to:', phoneNumber);
       const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      console.log('OTP sent successfully for signup, confirmation result:', !!confirmation);
       setConfirmationResult(confirmation);
       setStep(3);
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Signup failed');
+      console.error('Signup error:', error);
+      let errorMessage = 'Signup failed';
+      
+      if (error.code === 'auth/invalid-phone-number') {
+        errorMessage = 'Invalid phone number format. Please use +91xxxxxxxxxx format.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many requests. Please try again later.';
+      } else if (error.code === 'auth/captcha-check-failed') {
+        errorMessage = 'Captcha verification failed. Please refresh and try again.';
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -153,7 +186,7 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h2>SMS Verification</h2>
+          <h2>Phone Verification</h2>
           <p>We've sent an OTP to {formData.phone}</p>
           <form onSubmit={handleOtpVerification}>
             <input
@@ -215,6 +248,9 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
             onChange={handleInputChange}
             required
           />
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+            Format: +91xxxxxxxxxx (e.g., +919876543210)
+          </div>
           <div id="recaptcha-container-signup"></div>
           <input
             type="password"

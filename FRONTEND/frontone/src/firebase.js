@@ -11,6 +11,16 @@ const firebaseConfig = {
   measurementId: "G-R7ECT4KYFT"
 };
 
+console.log('Initializing Firebase with config:', {
+  projectId: firebaseConfig.projectId,
+  authDomain: firebaseConfig.authDomain,
+  apiKey: firebaseConfig.apiKey ? 'Present' : 'Missing'
+});
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+console.log('Firebase app initialized:', !!app);
+console.log('Firebase auth initialized:', !!auth);
+
 export default app;

@@ -28,6 +28,7 @@ const PORT = process.env.PORT || 3000;
 // Cloudflare WebRTC Configuration
 const CLOUDFLARE_APP_ID = 'ccb11479d57e58d6450a4743bad9a1e8';
 const CLOUDFLARE_API_TOKEN = '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514';
+const TURN_KEY_ID = CLOUDFLARE_APP_ID;
 
 // Optimized in-memory cache
 const cache = new Map();
@@ -64,7 +65,43 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Mailjet email service
+const mailjet = require('node-mailjet').apiConnect(
+  process.env.MAILJET_API_KEY,
+  process.env.MAILJET_SECRET_KEY
+);
+
+// Send OTP email
+const sendOTPEmail = async (email, otp, purpose) => {
+  const subject = purpose === 'signup' ? 'PeerSync - Email Verification' : 
+                  purpose === 'login' ? 'PeerSync - Login Verification' : 
+                  'PeerSync - Password Reset';
+  
+  const html = `
+    <h2>PeerSync ${purpose === 'signup' ? 'Email Verification' : purpose === 'login' ? 'Login Verification' : 'Password Reset'}</h2>
+    <p>Your OTP code is: <strong>${otp}</strong></p>
+    <p>This code will expire in 10 minutes.</p>
+  `;
+
+  const request = mailjet.post('send', { version: 'v3.1' }).request({
+    Messages: [
+      {
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL,
+          Name: 'PeerSync'
+        },
+        To: [
+          {
+            Email: email
+          }
+        ],
+        Subject: subject,
+        HTMLPart: html
+      }
+    ]
+  });
+  
+  await request;
+};
 
 // Test database connection and create tables
 pool.connect(async (err, client, release) => {
@@ -174,6 +211,40 @@ app.use('/api/verify-signup', limiter);
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'PeerSync Backend is running!' });
+});
+
+// TURN credentials endpoint for WebRTC
+app.get('/api/turn-credentials', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${TURN_KEY_ID}/credentials/generate`,
+      { ttl: 3600 }, // 1 hour TTL
+      {
+        headers: {
+          'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    // Add STUN server as fallback
+    const iceServers = [
+      ...response.data.iceServers,
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ];
+    
+    res.json({ iceServers });
+  } catch (error) {
+    console.error('TURN credential generation failed:', error.response?.data || error.message);
+    
+    // Fallback to public STUN servers if TURN fails
+    res.json({
+      iceServers: [
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:stun.l.google.com:19302' }
+      ]
+    });
+  }
 });
 
 // Generate OTP
@@ -306,35 +377,50 @@ app.post('/api/verify-signup', async (req, res) => {
   }
 });
 
-// Login with phone
+
+
+
+
+// Login with email and password
 app.post('/api/login', async (req, res) => {
   try {
-    const { phone, role } = req.body;
+    const { email, password, role } = req.body;
     
-    if (!phone || !role) {
-      return res.status(400).json({ error: 'Phone and role are required' });
+    if (!email || !password || !role) {
+      return res.status(400).json({ error: 'All fields are required' });
     }
     
-    // Check if user exists
+    // Check if user exists and verify password
     const result = await pool.query(
-      'SELECT id, username, email, phone, role FROM users WHERE phone = $1 AND role = $2',
-      [phone, role]
+      'SELECT id, username, email, phone, password, role FROM users WHERE email = $1 AND role = $2',
+      [email, role]
     );
     
     if (result.rows.length === 0) {
-      return res.status(400).json({ error: 'User not found' });
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
     
     const user = result.rows[0];
-    const sessionId = createVerificationSession(phone, 'login');
+    const isValidPassword = await bcrypt.compare(password, user.password);
     
-    // Store user data temporarily
-    setCache(`login_user_${sessionId}`, user);
+    if (!isValidPassword) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+    
+    // Store user data for phone verification step
+    const sessionId = 'login_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    setCache(`login_session_${sessionId}`, {
+      userId: user.id,
+      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      role: user.role
+    });
     
     res.json({ 
       sessionId,
       userId: user.id,
-      phone: phone.replace(/.(?=.{4})/g, '*')
+      requiresPhoneVerification: true
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -342,8 +428,8 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Verify SMS OTP for login
-app.post('/api/verify-login', async (req, res) => {
+// Verify phone OTP for login
+app.post('/api/verify-phone-login', async (req, res) => {
   try {
     const { sessionId, firebaseToken } = req.body;
     
@@ -351,181 +437,30 @@ app.post('/api/verify-login', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Get user data
-    const user = getFromCache(`login_user_${sessionId}`);
-    if (!user) {
+    // Get user data from session
+    const userData = getFromCache(`login_session_${sessionId}`);
+    if (!userData) {
       return res.status(400).json({ error: 'Invalid or expired session' });
     }
     
-    // Verify Firebase token (you can add additional verification here)
-    // For now, we trust the frontend Firebase verification
-    
-    const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    // Create JWT token
+    const token = jwt.sign({ userId: userData.userId, role: userData.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
     
     // Clear session data
-    cache.delete(`login_user_${sessionId}`);
+    cache.delete(`login_session_${sessionId}`);
+    
+    const user = {
+      id: userData.userId,
+      username: userData.username,
+      email: userData.email,
+      phone: userData.phone,
+      role: userData.role
+    };
     
     res.json({ token, user });
   } catch (error) {
-    console.error('Login verification error:', error);
+    console.error('Phone verification error:', error);
     res.status(500).json({ error: 'Verification failed' });
-  }
-});
-
-// Generate OTP (keeping for backward compatibility)
-const generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    await pool.query(
-      'INSERT INTO otp_codes (email, otp_code, purpose, expires_at) VALUES ($1, $2, $3, $4)',
-      [email, otp, 'signup', expiresAt]
-    );
-
-    try {
-      await sendOTPEmail(email, otp, 'signup');
-      const tempUserData = { username, email, phone, password: hashedPassword, role };
-      res.json({ 
-        message: 'OTP sent to email. Please verify to complete signup.',
-        tempUserId: Buffer.from(JSON.stringify(tempUserData)).toString('base64')
-      });
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
-    }
-  } catch (error) {
-    console.error('Signup error:', error);
-    res.status(500).json({ error: 'Server error: ' + error.message });
-  }
-});
-
-// Verify signup OTP
-app.post('/api/verify-signup', async (req, res) => {
-  try {
-    const { otp, tempUserId } = req.body;
-    const userData = JSON.parse(Buffer.from(tempUserId, 'base64').toString());
-
-    const otpResult = await pool.query(
-      'SELECT * FROM otp_codes WHERE email = $1 AND otp_code = $2 AND purpose = $3 AND expires_at > NOW() AND is_used = FALSE',
-      [userData.email, otp, 'signup']
-    );
-
-    if (otpResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired OTP' });
-    }
-
-    // Create user
-    const result = await pool.query(
-      'INSERT INTO users (username, email, phone, password_hash, role, is_verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, role',
-      [userData.username, userData.email, userData.phone, userData.password, userData.role, true]
-    );
-
-    // Mark OTP as used
-    await pool.query('UPDATE otp_codes SET is_used = TRUE WHERE id = $1', [otpResult.rows[0].id]);
-
-    const token = jwt.sign(
-      { userId: result.rows[0].id, role: result.rows[0].role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.json({
-      message: 'Signup successful',
-      token,
-      user: result.rows[0]
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Login
-app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password, role } = req.body;
-
-    const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1 AND role = $2 AND is_verified = TRUE',
-      [email, role]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const user = result.rows[0];
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-
-    if (!isValidPassword) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    // Generate and send login OTP
-    const otp = generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    await pool.query(
-      'INSERT INTO otp_codes (email, otp_code, purpose, expires_at) VALUES ($1, $2, $3, $4)',
-      [user.email, otp, 'login', expiresAt]
-    );
-
-    try {
-      await sendOTPEmail(user.email, otp, 'login');
-      res.json({
-        message: 'OTP sent to email for verification',
-        userId: user.id
-      });
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Verify login OTP
-app.post('/api/verify-login', async (req, res) => {
-  try {
-    const { otp, userId } = req.body;
-
-    const user = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
-    if (user.rows.length === 0) {
-      return res.status(400).json({ error: 'User not found' });
-    }
-
-    const otpResult = await pool.query(
-      'SELECT * FROM otp_codes WHERE email = $1 AND otp_code = $2 AND purpose = $3 AND expires_at > NOW() AND is_used = FALSE',
-      [user.rows[0].email, otp, 'login']
-    );
-
-    if (otpResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired OTP' });
-    }
-
-    // Mark OTP as used
-    await pool.query('UPDATE otp_codes SET is_used = TRUE WHERE id = $1', [otpResult.rows[0].id]);
-
-    const token = jwt.sign(
-      { userId: user.rows[0].id, role: user.rows[0].role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.json({
-      message: 'Login successful',
-      token,
-      user: {
-        id: user.rows[0].id,
-        username: user.rows[0].username,
-        email: user.rows[0].email,
-        role: user.rows[0].role
-      }
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Server error' });
   }
 });
 

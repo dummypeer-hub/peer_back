@@ -6,12 +6,14 @@ import config from '../config';
 import './Auth.css';
 
 const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
+  const [step, setStep] = useState(1); // 1: email/password, 2: phone input, 3: OTP
   const [formData, setFormData] = useState({
-    phone: '',
-    role: ''
+    email: '',
+    password: '',
+    role: '',
+    phone: ''
   });
   const [otp, setOtp] = useState('');
-  const [showOtpInput, setShowOtpInput] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -20,19 +22,31 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
 
   useEffect(() => {
     // Initialize reCAPTCHA
-    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'invisible',
-      callback: () => {
-        console.log('reCAPTCHA solved');
-      }
-    });
-    setRecaptchaVerifier(verifier);
+    try {
+      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: () => {
+          console.log('reCAPTCHA solved');
+        },
+        'expired-callback': () => {
+          console.log('reCAPTCHA expired');
+        },
+        'error-callback': (error) => {
+          console.error('reCAPTCHA error:', error);
+        }
+      });
+      setRecaptchaVerifier(verifier);
+      console.log('reCAPTCHA verifier initialized successfully');
 
-    return () => {
-      if (verifier) {
-        verifier.clear();
-      }
-    };
+      return () => {
+        if (verifier) {
+          verifier.clear();
+        }
+      };
+    } catch (error) {
+      console.error('Failed to initialize reCAPTCHA:', error);
+      setError('Failed to initialize phone verification. Please refresh the page.');
+    }
   }, []);
 
   const handleInputChange = (e) => {
@@ -40,30 +54,62 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
     setError('');
   };
 
-  const handleLogin = async (e) => {
+  const handleEmailLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // Format phone number
-      const phoneNumber = formData.phone.startsWith('+') ? formData.phone : `+91${formData.phone}`;
-      
-      // Check if user exists
       const response = await axios.post(`${config.API_BASE_URL}/login`, {
-        phone: phoneNumber,
+        email: formData.email,
+        password: formData.password,
         role: formData.role
       });
       
-      setSessionId(response.data.sessionId);
+      if (response.data.requiresPhoneVerification) {
+        setSessionId(response.data.sessionId);
+        setStep(2); // Move to phone input step
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePhoneVerification = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (!recaptchaVerifier) {
+        throw new Error('reCAPTCHA not initialized. Please refresh the page.');
+      }
+
+      const phoneNumber = formData.phone.startsWith('+') ? formData.phone : `+91${formData.phone}`;
+      console.log('Attempting to send OTP to:', phoneNumber);
       
       // Send SMS OTP via Firebase
       const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      console.log('OTP sent successfully, confirmation result:', !!confirmation);
       setConfirmationResult(confirmation);
-      setShowOtpInput(true);
-      setError('');
+      setStep(3); // Move to OTP step
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Login failed');
+      console.error('Phone verification error:', error);
+      let errorMessage = 'Failed to send OTP';
+      
+      if (error.code === 'auth/invalid-phone-number') {
+        errorMessage = 'Invalid phone number format. Please use +91xxxxxxxxxx format.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many requests. Please try again later.';
+      } else if (error.code === 'auth/captcha-check-failed') {
+        errorMessage = 'Captcha verification failed. Please refresh and try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -79,7 +125,7 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
       const firebaseToken = await result.user.getIdToken();
       
       // Verify with backend
-      const response = await axios.post(`${config.API_BASE_URL}/verify-login`, {
+      const response = await axios.post(`${config.API_BASE_URL}/verify-phone-login`, {
         sessionId,
         firebaseToken
       });
@@ -94,12 +140,43 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
     }
   };
 
-  if (showOtpInput) {
+  // Step 2: Phone Input
+  if (step === 2) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <h2>Phone Verification</h2>
+          <p>Enter your phone number to receive OTP</p>
+          <form onSubmit={handlePhoneVerification}>
+            <input
+              type="tel"
+              name="phone"
+              placeholder="Phone Number (+91xxxxxxxxxx)"
+              value={formData.phone}
+              onChange={handleInputChange}
+              required
+            />
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+              Format: +91xxxxxxxxxx (e.g., +919876543210)
+            </div>
+            <div id="recaptcha-container"></div>
+            {error && <div className="error">{error}</div>}
+            <button type="submit" disabled={loading}>
+              {loading ? 'Sending OTP...' : 'Send OTP'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 3: OTP Verification
+  if (step === 3) {
     return (
       <div className="auth-container">
         <div className="auth-card">
           <h2>SMS Verification</h2>
-          <p>We've sent an OTP to your phone number</p>
+          <p>We've sent an OTP to {formData.phone}</p>
           <form onSubmit={handleOtpVerification}>
             <input
               type="text"
@@ -109,7 +186,6 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
               maxLength="6"
               required
             />
-            <div id="recaptcha-container"></div>
             {error && <div className="error">{error}</div>}
             <button type="submit" disabled={loading}>
               {loading ? 'Verifying...' : 'Verify OTP'}
@@ -130,7 +206,7 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
         )}
         <h1>PeerVerse</h1>
         <h2>Sign In</h2>
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleEmailLogin}>
           <select
             name="role"
             value={formData.role}
@@ -142,14 +218,21 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
             <option value="mentee">👨🎓 Mentee</option>
           </select>
           <input
-            type="tel"
-            name="phone"
-            placeholder="Phone Number (+91xxxxxxxxxx)"
-            value={formData.phone}
+            type="email"
+            name="email"
+            placeholder="Email"
+            value={formData.email}
             onChange={handleInputChange}
             required
           />
-          <div id="recaptcha-container"></div>
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={handleInputChange}
+            required
+          />
           {error && <div className="error">{error}</div>}
           <button type="submit" disabled={loading} className="primary-btn">
             {loading ? 'Signing In...' : 'Sign In'}
