@@ -134,14 +134,7 @@ const sendOTPEmail = async (email, otp, purpose) => {
         ],
         Subject: subject,
         HTMLPart: html,
-        TextPart: `PeerVerse Verification Code: ${otp}. This code expires in 10 minutes. If you didn't request this, please ignore this email.`,
-        Headers: {
-          'X-Mailjet-Campaign': 'peerverse-auth',
-          'X-MC-Tags': 'authentication,otp,security',
-          'List-Unsubscribe': '<mailto:unsubscribe@peerverse.in>',
-          'X-Priority': '1',
-          'Importance': 'high'
-        }
+        TextPart: `PeerVerse Verification Code: ${otp}. This code expires in 10 minutes. If you didn't request this, please ignore this email.`
       }
     ]
   });
