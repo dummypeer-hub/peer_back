@@ -184,14 +184,24 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       const connectivityResults = await testConnectivity(WEBRTC_CONFIG.iceServers);
       console.log('Connectivity test results:', connectivityResults);
       
-      // Get user media with better constraints
+      // Get user media with mobile-optimized constraints
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      const videoConstraints = isMobile ? {
+        width: { ideal: 640, max: 1280 },
+        height: { ideal: 480, max: 720 },
+        aspectRatio: { ideal: 4/3, min: 1, max: 2 },
+        frameRate: { ideal: 24, max: 30 },
+        facingMode: 'user'
+      } : {
+        width: { ideal: 1280, min: 640 },
+        height: { ideal: 720, min: 480 },
+        aspectRatio: { ideal: 16/9 },
+        frameRate: { ideal: 30 }
+      };
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-          aspectRatio: { ideal: 16/9 },
-          frameRate: { ideal: 30 }
-        },
+        video: videoConstraints,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
