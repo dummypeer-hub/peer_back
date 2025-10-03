@@ -1,10 +1,9 @@
 const config = {
-  API_BASE_URL: process.env.NODE_ENV === 'production' 
-    ? 'https://peerversefinal-production.up.railway.app/api'
-    : 'http://localhost:5000/api',
-  SOCKET_URL: process.env.NODE_ENV === 'production'
-    ? 'https://peerversefinal-production.up.railway.app'
-    : 'http://localhost:5000'
+  API_BASE_URL: 'https://peerversefinal-production.up.railway.app/api',
+  SOCKET_URL: 'https://peerversefinal-production.up.railway.app',
+  // Network timeout settings
+  TIMEOUT: 15000, // 15 seconds
+  RETRY_ATTEMPTS: 3
 };
 
 export default config;

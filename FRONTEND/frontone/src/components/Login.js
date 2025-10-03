@@ -30,6 +30,11 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
         email: formData.email,
         password: formData.password,
         role: formData.role
+      }, {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       
       if (response.data.requiresEmailVerification) {
@@ -37,7 +42,15 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
         setStep(2); // Move to OTP step
       }
     } catch (error) {
-      setError(error.response?.data?.error || 'Login failed');
+      let errorMessage = 'Login failed';
+      if (error.code === 'ENOTFOUND' || error.message.includes('ERR_NAME_NOT_RESOLVED')) {
+        errorMessage = 'Network error: Cannot connect to server. Please check your internet connection.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Connection timeout. Please try again.';
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
