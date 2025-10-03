@@ -2149,6 +2149,11 @@ app.post('/api/video-call/request', async (req, res) => {
       allRooms: io ? Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user_')) : []
     });
     
+    // Clear cache to ensure immediate updates
+    clearCachePattern(`user_calls_${mentorId}`);
+    clearCachePattern(`user_calls_${menteeId}`);
+    clearCachePattern(`notifications_${mentorId}`);
+    
     // Send real-time notification to mentor
     console.log(`📞 Sending call_request to mentor ${mentorId} in room ${mentorRoom}`);
     if (io) {
@@ -2211,6 +2216,11 @@ app.post('/api/video-call/:callId/accept', async (req, res) => {
       [call.rows[0].mentee_id]
     );
     
+    // Clear cache to ensure immediate updates
+    clearCachePattern(`user_calls_${mentorId}`);
+    clearCachePattern(`user_calls_${call.rows[0].mentee_id}`);
+    clearCachePattern(`notifications_${call.rows[0].mentee_id}`);
+    
     // Create notification for mentee
     if (mentee.rows.length > 0) {
       await pool.query(
@@ -2261,6 +2271,10 @@ app.post('/api/video-call/:callId/reject', async (req, res) => {
     );
     
     if (call.rows.length > 0) {
+      // Clear cache to ensure immediate updates
+      clearCachePattern(`user_calls_${mentorId}`);
+      clearCachePattern(`user_calls_${call.rows[0].mentee_id}`);
+      
       // Send real-time notification to mentee
       console.log(`❌ Sending call_rejected to mentee ${call.rows[0].mentee_id}`);
       if (io) {
@@ -2399,7 +2413,7 @@ app.get('/api/video-calls/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const cacheKey = `user_calls_${userId}`;
-    const cached = getFromCache(cacheKey, 60000); // 1 minute cache
+    const cached = getFromCache(cacheKey, 30000); // 30 second cache for faster updates
     if (cached) {
       return res.json({ calls: cached });
     }
@@ -2416,7 +2430,7 @@ app.get('/api/video-calls/:userId', async (req, res) => {
       LIMIT 15
     `, [userId]);
     
-    setCache(cacheKey, result.rows, 60000);
+    setCache(cacheKey, result.rows, 30000); // 30 second cache
     res.json({ calls: result.rows });
   } catch (error) {
     console.error('Get user calls error:', error);
@@ -2450,6 +2464,14 @@ io.on('connection', (socket) => {
     const roomSize = io.sockets.adapter.rooms.get(roomName)?.size || 0;
     console.log(`[${new Date().toLocaleTimeString()}] 🏠 User ${userId} joined room: ${roomName} (${roomSize} members)`);
     console.log(`📋 All user rooms:`, Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.startsWith('user_')));
+    
+    // Send confirmation back to client
+    socket.emit('user_room_joined', {
+      userId,
+      roomName,
+      success: true,
+      timestamp: new Date().toISOString()
+    });
   });
   
   socket.on('join_call', (callId) => {

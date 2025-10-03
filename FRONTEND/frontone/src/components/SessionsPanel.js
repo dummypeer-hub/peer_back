@@ -11,40 +11,85 @@ const SessionsPanel = ({ user, onJoinSession }) => {
 
   useEffect(() => {
     console.log('SessionsPanel connecting to socket:', config.SOCKET_URL);
-    const socketConnection = io(config.SOCKET_URL);
+    const socketConnection = io(config.SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
     setSocket(socketConnection);
     
-    socketConnection.emit('join_user_room', user.id);
+    socketConnection.on('connect', () => {
+      console.log(`✅ ${user.role} socket connected, joining room user_${user.id}`);
+      socketConnection.emit('join_user_room', user.id);
+      
+      // Retry room joining after 2 seconds if not confirmed
+      setTimeout(() => {
+        socketConnection.emit('join_user_room', user.id);
+        console.log(`🔄 Retrying room join for user ${user.id}`);
+      }, 2000);
+    });
+    
+    socketConnection.on('user_room_joined', (data) => {
+      console.log(`✅ Room join confirmed:`, data);
+    });
     
     if (user.role === 'mentor') {
       socketConnection.on('call_request', (data) => {
         console.log('📞 Mentor received call_request:', data);
+        // Add new session immediately to UI
+        const newSession = {
+          id: data.callId,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          mentee_name: data.menteeName,
+          channel_name: data.channelName
+        };
+        setSessions(prev => [newSession, ...prev.filter(s => s.id !== data.callId)]);
         console.log('🔄 Refreshing sessions after call request...');
-        loadSessions();
+        setTimeout(() => loadSessions(), 500); // Delayed refresh to ensure DB is updated
       });
       
       socketConnection.on('global_call_request', (data) => {
         if (data.targetMentorId === user.id) {
           console.log('📡 Mentor received global_call_request:', data);
+          // Add new session immediately to UI
+          const newSession = {
+            id: data.callId,
+            status: 'pending',
+            created_at: new Date().toISOString(),
+            mentee_name: data.menteeName,
+            channel_name: data.channelName
+          };
+          setSessions(prev => [newSession, ...prev.filter(s => s.id !== data.callId)]);
           console.log('🔄 Refreshing sessions after global call request...');
-          loadSessions();
+          setTimeout(() => loadSessions(), 500);
         }
       });
     } else {
       socketConnection.on('call_accepted', (data) => {
         console.log('✅ Mentee received call_accepted:', data);
-        loadSessions();
+        // Update session status immediately
+        setSessions(prev => prev.map(session => 
+          session.id === data.callId 
+            ? { ...session, status: 'accepted', accepted_at: new Date().toISOString() }
+            : session
+        ));
+        setTimeout(() => loadSessions(), 500);
       });
       
-      socketConnection.on('call_rejected', () => {
+      socketConnection.on('call_rejected', (data) => {
         console.log('❌ Mentee received call_rejected');
-        loadSessions();
+        // Update session status immediately
+        setSessions(prev => prev.map(session => 
+          session.id === data.callId 
+            ? { ...session, status: 'rejected', ended_at: new Date().toISOString() }
+            : session
+        ));
+        setTimeout(() => loadSessions(), 500);
       });
     }
-    
-    socketConnection.on('connect', () => {
-      console.log(`✅ ${user.role} socket connected, joining room user_${user.id}`);
-    });
     
     socketConnection.on('disconnect', () => {
       console.log(`❌ ${user.role} socket disconnected`);
@@ -63,11 +108,19 @@ const SessionsPanel = ({ user, onJoinSession }) => {
     loadSessions();
     
     // Check for expired sessions every 30 seconds
-    const interval = setInterval(() => {
+    const expiredInterval = setInterval(() => {
       checkExpiredSessions();
     }, 30000);
     
-    return () => clearInterval(interval);
+    // Refresh sessions every 10 seconds to ensure real-time updates
+    const refreshInterval = setInterval(() => {
+      loadSessions();
+    }, 10000);
+    
+    return () => {
+      clearInterval(expiredInterval);
+      clearInterval(refreshInterval);
+    };
   }, []);
   
   const checkExpiredSessions = async () => {

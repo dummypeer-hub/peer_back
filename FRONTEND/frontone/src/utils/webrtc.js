@@ -8,8 +8,12 @@ export const getICEServers = async () => {
   } catch (error) {
     console.error('Failed to get TURN credentials, using fallback:', error);
     return [
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      { urls: 'stun:stun.l.google.com:19302' }
+      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: 'turn:relay1.expressturn.com:3480',
+        username: '000000002074822364',
+        credential: 'WnbuuoA398ZVw+A920nzNkU8eiw='
+      }
     ];
   }
 };

@@ -141,27 +141,12 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
 
   const WEBRTC_CONFIG = {
     iceServers: [
-      // Multiple STUN servers for better connectivity
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      // Multiple TURN servers for NAT traversal
       {
-        urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443'],
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: ['turn:relay1.expressturn.com:3478'],
-        username: 'ef3CYGPRL8ZPAA5KXC',
-        credential: 'Hj8pBqZnfQmxrLzM'
-      },
-      {
-        urls: 'turn:turn.cloudflare.com:3478',
-        username: 'ccb11479d57e58d6450a4743bad9a1e8',
-        credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
+        urls: 'turn:relay1.expressturn.com:3480',
+        username: '000000002074822364',
+        credential: 'WnbuuoA398ZVw+A920nzNkU8eiw='
       }
     ],
     iceCandidatePoolSize: 10,

@@ -27,9 +27,9 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     {
-      urls: 'turn:turn.cloudflare.com:3478',
-      username: 'ccb11479d57e58d6450a4743bad9a1e8',
-      credential: '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514'
+      urls: 'turn:relay1.expressturn.com:3480',
+      username: '000000002074822364',
+      credential: 'WnbuuoA398ZVw+A920nzNkU8eiw='
     }
   ];
 
