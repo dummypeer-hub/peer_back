@@ -225,6 +225,137 @@ pool.connect(async (err, client, release) => {
           created_at TIMESTAMP DEFAULT NOW()
         );
         
+        CREATE TABLE IF NOT EXISTS otp_codes (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          otp_code VARCHAR(6) NOT NULL,
+          purpose VARCHAR(20) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          is_used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(255) UNIQUE NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          phone VARCHAR(20),
+          password_hash VARCHAR(255) NOT NULL,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('mentor', 'mentee')),
+          verified BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS notifications (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          type VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          message TEXT NOT NULL,
+          is_read BOOLEAN DEFAULT FALSE,
+          related_id INTEGER,
+          related_type VARCHAR(50),
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS mentee_favorites (
+          id SERIAL PRIMARY KEY,
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(mentee_id, mentor_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS mentor_profiles (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) UNIQUE,
+          name VARCHAR(255),
+          profile_picture TEXT,
+          bio TEXT,
+          education JSONB DEFAULT '[]',
+          skills JSONB DEFAULT '[]',
+          background JSONB DEFAULT '[]',
+          interests JSONB DEFAULT '[]',
+          languages JSONB DEFAULT '[]',
+          availability JSONB DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS blogs (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          content TEXT NOT NULL,
+          category VARCHAR(100),
+          tags JSONB DEFAULT '[]',
+          images JSONB DEFAULT '[]',
+          likes_count INTEGER DEFAULT 0,
+          comments_count INTEGER DEFAULT 0,
+          is_published BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS blog_likes (
+          id SERIAL PRIMARY KEY,
+          blog_id INTEGER NOT NULL REFERENCES blogs(id),
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(blog_id, mentee_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS blog_comments (
+          id SERIAL PRIMARY KEY,
+          blog_id INTEGER NOT NULL REFERENCES blogs(id),
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          content TEXT NOT NULL,
+          parent_comment_id INTEGER REFERENCES blog_comments(id),
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS communities (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          interest_category VARCHAR(100),
+          member_count INTEGER DEFAULT 0,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS community_members (
+          id SERIAL PRIMARY KEY,
+          community_id INTEGER NOT NULL REFERENCES communities(id),
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          joined_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(community_id, mentee_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS community_posts (
+          id SERIAL PRIMARY KEY,
+          community_id INTEGER NOT NULL REFERENCES communities(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          content TEXT,
+          file_url TEXT,
+          file_name VARCHAR(255),
+          file_type VARCHAR(50),
+          file_size BIGINT,
+          post_type VARCHAR(20) DEFAULT 'text',
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS community_post_reactions (
+          id SERIAL PRIMARY KEY,
+          post_id INTEGER NOT NULL REFERENCES community_posts(id),
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          reaction_type VARCHAR(20) NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(post_id, user_id)
+        );
+        
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentor_id ON video_calls(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_mentee_id ON video_calls(mentee_id);
         CREATE INDEX IF NOT EXISTS idx_video_calls_status ON video_calls(status);
