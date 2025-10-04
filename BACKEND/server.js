@@ -499,23 +499,20 @@ app.post('/api/signup', async (req, res) => {
     }
     
     // Store temp user data
-    const tempUserId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const sessionId = 'signup_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     
     // Store in cache temporarily
-    setCache(`temp_user_${tempUserId}`, {
+    setCache(`signup_session_${sessionId}`, {
       username,
       email,
       phone,
       hashedPassword,
-      role,
-      sessionId
+      role
     });
     
     res.json({ 
-      tempUserId,
       sessionId,
-      phone: phone.replace(/.(?=.{4})/g, '*') // Masked phone for display
+      requiresEmailVerification: true
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -526,14 +523,14 @@ app.post('/api/signup', async (req, res) => {
 // Verify email OTP for signup
 app.post('/api/verify-signup', async (req, res) => {
   try {
-    const { tempUserId, otp } = req.body;
+    const { sessionId, otp } = req.body;
     
-    if (!tempUserId || !otp) {
+    if (!sessionId || !otp) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Get temp user data
-    const tempUserData = getFromCache(`temp_user_${tempUserId}`);
+    // Get temp user data from session
+    const tempUserData = getFromCache(`signup_session_${sessionId}`);
     if (!tempUserData) {
       return res.status(400).json({ error: 'Invalid or expired session' });
     }
@@ -562,8 +559,8 @@ app.post('/api/verify-signup', async (req, res) => {
     const user = result.rows[0];
     const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
     
-    // Clear temp data
-    cache.delete(`temp_user_${tempUserId}`);
+    // Clear session data
+    cache.delete(`signup_session_${sessionId}`);
     
     res.json({ token, user });
   } catch (error) {
