@@ -187,27 +187,70 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       // Get user media with mobile-optimized constraints
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
-      const videoConstraints = isMobile ? {
-        width: { ideal: 640, max: 1280 },
-        height: { ideal: 480, max: 720 },
-        aspectRatio: { ideal: 4/3, min: 1, max: 2 },
-        frameRate: { ideal: 24, max: 30 },
-        facingMode: 'user'
-      } : {
-        width: { ideal: 1280, min: 640 },
-        height: { ideal: 720, min: 480 },
-        aspectRatio: { ideal: 16/9 },
-        frameRate: { ideal: 30 }
-      };
+      let stream = null;
+      let hasVideo = false;
+      let hasAudio = false;
       
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
+      // Try to get video first
+      try {
+        const videoConstraints = isMobile ? {
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          aspectRatio: { ideal: 4/3, min: 1, max: 2 },
+          frameRate: { ideal: 24, max: 30 },
+          facingMode: 'user'
+        } : {
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          aspectRatio: { ideal: 16/9 },
+          frameRate: { ideal: 30 }
+        };
+        
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        hasVideo = true;
+        hasAudio = true;
+        console.log('✅ Full media access successful');
+      } catch (error) {
+        console.warn('Full media failed, trying video only:', error.message);
+        
+        // Try video only
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          hasVideo = true;
+          console.log('✅ Video-only access successful');
+        } catch (videoError) {
+          console.warn('Video failed, trying audio only:', videoError.message);
+          
+          // Try audio only
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            hasAudio = true;
+            console.log('✅ Audio-only access successful');
+          } catch (audioError) {
+            console.warn('Audio failed, continuing without media:', audioError.message);
+            
+            // Create empty stream for meeting without media
+            const confirmed = window.confirm(
+              'Camera and microphone access failed. Do you want to join the meeting without video and audio? You can enable them later.'
+            );
+            
+            if (!confirmed) {
+              throw new Error('User cancelled meeting due to media access issues');
+            }
+            
+            // Create a dummy stream
+            stream = new MediaStream();
+            console.log('⚠️ Joining meeting without media');
+          }
         }
-      });
+      }
       
       setLocalStream(stream);
       if (localVideoRef.current) {
@@ -280,7 +323,11 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
 
     } catch (error) {
       console.error('Failed to initialize call:', error);
-      alert('Failed to access camera/microphone. Please check permissions.');
+      if (error.message.includes('User cancelled')) {
+        onEndCall();
+        return;
+      }
+      alert('Failed to initialize meeting: ' + error.message);
     }
   };
 
@@ -459,15 +506,20 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   };
 
   const sendMessage = () => {
-    if (newMessage.trim() && dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
+    if (newMessage.trim() && socketRef.current && socketRef.current.connected) {
       const message = {
         text: newMessage,
         sender: user.username,
-        timestamp: new Date().toLocaleTimeString()
+        timestamp: new Date().toLocaleTimeString(),
+        id: Date.now() + Math.random()
       };
       
       try {
-        dataChannelRef.current.send(JSON.stringify(message));
+        socketRef.current.emit('chat_message', {
+          callId,
+          message,
+          from: user.id
+        });
         setMessages(prev => [...prev, message]);
         setNewMessage('');
       } catch (error) {

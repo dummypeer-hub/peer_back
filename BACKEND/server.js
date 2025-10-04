@@ -69,8 +69,8 @@ const mailjet = require('node-mailjet').apiConnect(
   process.env.MAILJET_SECRET_KEY
 );
 
-// Send OTP email
-const sendOTPEmail = async (email, otp, purpose) => {
+// Send OTP email with retry mechanism
+const sendOTPEmail = async (email, otp, purpose, retryCount = 0) => {
   const subject = purpose === 'signup' ? 'PeerVerse - Account Verification' : 
                   purpose === 'login' ? 'PeerVerse - Secure Login Code' : 
                   'PeerVerse - Password Reset';
@@ -119,27 +119,42 @@ const sendOTPEmail = async (email, otp, purpose) => {
     </html>
   `;
 
-  const request = mailjet.post('send', { version: 'v3.1' }).request({
-    Messages: [
-      {
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL,
-          Name: 'PeerVerse Security'
-        },
-        To: [
-          {
-            Email: email,
-            Name: 'PeerVerse User'
-          }
-        ],
-        Subject: subject,
-        HTMLPart: html,
-        TextPart: `PeerVerse Verification Code: ${otp}. This code expires in 10 minutes. If you didn't request this, please ignore this email.`
-      }
-    ]
-  });
-  
-  await request;
+  try {
+    const request = mailjet.post('send', { version: 'v3.1' }).request({
+      Messages: [
+        {
+          From: {
+            Email: process.env.MAILJET_SENDER_EMAIL,
+            Name: 'PeerVerse Security'
+          },
+          To: [
+            {
+              Email: email,
+              Name: 'PeerVerse User'
+            }
+          ],
+          Subject: subject,
+          HTMLPart: html,
+          TextPart: `PeerVerse Verification Code: ${otp}. This code expires in 10 minutes. If you didn't request this, please ignore this email.`
+        }
+      ]
+    });
+    
+    const result = await request;
+    console.log('Email sent successfully:', result.body);
+    return result;
+  } catch (error) {
+    console.error('Email sending failed:', error.statusCode, error.message);
+    
+    // Retry up to 2 times
+    if (retryCount < 2) {
+      console.log(`Retrying email send (attempt ${retryCount + 1})...`);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      return sendOTPEmail(email, otp, purpose, retryCount + 1);
+    }
+    
+    throw new Error('Failed to send OTP email after 3 attempts');
+  }
 };
 
 // Test database connection and create tables
@@ -343,8 +358,14 @@ app.post('/api/signup', async (req, res) => {
       [email, otp, 'signup', expiresAt]
     );
     
-    // Send OTP via email
-    await sendOTPEmail(email, otp, 'signup');
+    // Send OTP via email with error handling
+    try {
+      await sendOTPEmail(email, otp, 'signup');
+      console.log('Signup OTP sent successfully to:', email);
+    } catch (emailError) {
+      console.error('Failed to send signup OTP:', emailError);
+      return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+    }
     
     // Store temp user data
     const tempUserId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -601,7 +622,13 @@ app.post('/api/forgot-password', async (req, res) => {
       [email, otp, 'reset', expiresAt]
     );
 
-    await sendOTPEmail(email, otp, 'reset');
+    try {
+      await sendOTPEmail(email, otp, 'reset');
+      console.log('Reset OTP sent successfully to:', email);
+    } catch (emailError) {
+      console.error('Failed to send reset OTP:', emailError);
+      return res.status(500).json({ error: 'Failed to send reset email. Please try again.' });
+    }
 
     res.json({ message: 'Password reset OTP sent to email' });
   } catch (error) {
