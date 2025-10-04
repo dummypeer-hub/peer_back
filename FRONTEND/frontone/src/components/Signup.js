@@ -13,7 +13,6 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     password: ''
   });
   const [otp, setOtp] = useState('');
-  const [tempUserId, setTempUserId] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -54,7 +53,6 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     try {
       const response = await axios.post(`${config.API_BASE_URL}/signup`, formData);
       
-      setTempUserId(response.data.tempUserId);
       setSessionId(response.data.sessionId);
       setStep(3);
     } catch (error) {
@@ -70,7 +68,7 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
 
     try {
       const response = await axios.post(`${config.API_BASE_URL}/verify-signup`, {
-        tempUserId,
+        sessionId,
         otp
       });
       
