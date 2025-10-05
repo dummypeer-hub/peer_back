@@ -157,10 +157,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           
           const constraints = {
             video: {
-              width: { ideal: 480, max: 640 },
-              height: { ideal: 360, max: 480 },
+              width: { ideal: 640, max: 1280 },
+              height: { ideal: 480, max: 720 },
               aspectRatio: { ideal: 4/3, min: 1.2, max: 1.8 },
-              frameRate: { ideal: 20, max: 24 },
+              frameRate: { ideal: 24, max: 30 },
               facingMode: isMobile ? 'user' : undefined
             },
             audio: {
@@ -686,10 +686,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const videoStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 480, max: 640 },
-            height: { ideal: 360, max: 480 },
+            width: { ideal: 640, max: 1280 },
+            height: { ideal: 480, max: 720 },
             aspectRatio: { ideal: 4/3, min: 1.2, max: 1.8 },
-            frameRate: { ideal: 20, max: 24 },
+            frameRate: { ideal: 24, max: 30 },
             facingMode: isMobile ? 'user' : undefined
           }
         });

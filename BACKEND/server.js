@@ -243,7 +243,25 @@ pool.connect(async (err, client, release) => {
           mentor_id INTEGER NOT NULL REFERENCES users(id),
           rating INTEGER CHECK (rating >= 1 AND rating <= 5),
           feedback TEXT,
-          created_at TIMESTAMP DEFAULT NOW()
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(session_id, mentee_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS mentor_feedback (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          session_id INTEGER REFERENCES video_calls(id),
+          overall_rating INTEGER CHECK (overall_rating >= 1 AND overall_rating <= 5),
+          communication_rating INTEGER CHECK (communication_rating >= 1 AND communication_rating <= 5),
+          knowledge_rating INTEGER CHECK (knowledge_rating >= 1 AND knowledge_rating <= 5),
+          helpfulness_rating INTEGER CHECK (helpfulness_rating >= 1 AND helpfulness_rating <= 5),
+          feedback_text TEXT,
+          would_recommend BOOLEAN DEFAULT true,
+          tags JSONB DEFAULT '[]',
+          is_anonymous BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
         );
         
         CREATE TABLE IF NOT EXISTS mentor_ratings (
@@ -382,6 +400,9 @@ pool.connect(async (err, client, release) => {
         CREATE INDEX IF NOT EXISTS idx_mentee_profiles_user_id ON mentee_profiles(user_id);
         CREATE INDEX IF NOT EXISTS idx_mentor_earnings_mentor_id ON mentor_earnings(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_session_feedback_session_id ON session_feedback(session_id);
+        CREATE INDEX IF NOT EXISTS idx_mentor_feedback_mentor_id ON mentor_feedback(mentor_id);
+        CREATE INDEX IF NOT EXISTS idx_mentor_feedback_mentee_id ON mentor_feedback(mentee_id);
+        CREATE INDEX IF NOT EXISTS idx_mentor_feedback_session_id ON mentor_feedback(session_id);
         CREATE INDEX IF NOT EXISTS idx_mentor_ratings_mentor_id ON mentor_ratings(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_blog_views_blog_id ON blog_views(blog_id);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_mentor_ratings_unique ON mentor_ratings(mentor_id);
@@ -505,10 +526,14 @@ app.post('/api/session-feedback', async (req, res) => {
   try {
     const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
     
-    // Insert feedback
+    if (!sessionId || !menteeId || !mentorId || !rating) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Insert feedback with ON CONFLICT handling
     await pool.query(
-      'INSERT INTO session_feedback (session_id, mentee_id, mentor_id, rating, feedback) VALUES ($1, $2, $3, $4, $5)',
-      [sessionId, menteeId, mentorId, rating, feedback]
+      'INSERT INTO session_feedback (session_id, mentee_id, mentor_id, rating, feedback) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (session_id, mentee_id) DO UPDATE SET rating = $4, feedback = $5, created_at = NOW()',
+      [sessionId, menteeId, mentorId, rating, feedback || '']
     );
     
     // Update mentor rating
@@ -533,13 +558,82 @@ app.post('/api/session-feedback', async (req, res) => {
       );
     }
     
-    // Clear cache to update mentor ratings
     clearCachePattern(`mentor_${mentorId}`);
     clearCachePattern('mentors_list');
     
     res.json({ message: 'Feedback submitted successfully' });
   } catch (error) {
     console.error('Submit feedback error:', error);
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Submit detailed mentor feedback
+app.post('/api/mentor-feedback', async (req, res) => {
+  try {
+    const { 
+      mentorId, 
+      menteeId, 
+      sessionId, 
+      overallRating, 
+      communicationRating, 
+      knowledgeRating, 
+      helpfulnessRating, 
+      feedbackText, 
+      wouldRecommend, 
+      tags, 
+      isAnonymous 
+    } = req.body;
+    
+    if (!mentorId || !menteeId || !overallRating) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    await pool.query(
+      'INSERT INTO mentor_feedback (mentor_id, mentee_id, session_id, overall_rating, communication_rating, knowledge_rating, helpfulness_rating, feedback_text, would_recommend, tags, is_anonymous) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      [mentorId, menteeId, sessionId, overallRating, communicationRating, knowledgeRating, helpfulnessRating, feedbackText, wouldRecommend, JSON.stringify(tags || []), isAnonymous]
+    );
+    
+    clearCachePattern(`mentor_${mentorId}`);
+    res.json({ message: 'Detailed feedback submitted successfully' });
+  } catch (error) {
+    console.error('Submit detailed feedback error:', error);
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Get mentor detailed feedback
+app.get('/api/mentor/:mentorId/detailed-feedback', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT mf.*, u.username as mentee_name
+      FROM mentor_feedback mf
+      LEFT JOIN users u ON mf.mentee_id = u.id
+      WHERE mf.mentor_id = $1 AND mf.is_anonymous = false
+      ORDER BY mf.created_at DESC
+      LIMIT 50
+    `, [mentorId]);
+    
+    const stats = await pool.query(`
+      SELECT 
+        AVG(overall_rating) as avg_overall,
+        AVG(communication_rating) as avg_communication,
+        AVG(knowledge_rating) as avg_knowledge,
+        AVG(helpfulness_rating) as avg_helpfulness,
+        COUNT(*) as total_feedback,
+        COUNT(CASE WHEN would_recommend = true THEN 1 END) as recommendations
+      FROM mentor_feedback 
+      WHERE mentor_id = $1
+    `, [mentorId]);
+    
+    res.json({ 
+      feedback: result.rows,
+      stats: stats.rows[0]
+    });
+  } catch (error) {
+    console.error('Get detailed feedback error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
