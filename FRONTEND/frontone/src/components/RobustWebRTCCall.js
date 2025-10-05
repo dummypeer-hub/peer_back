@@ -157,10 +157,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           
           const constraints = {
             video: {
-              width: { ideal: 640, max: 1280 },
-              height: { ideal: 480, max: 720 },
+              width: { ideal: 480, max: 640 },
+              height: { ideal: 360, max: 480 },
               aspectRatio: { ideal: 4/3, min: 1.2, max: 1.8 },
-              frameRate: { ideal: 24, max: 30 },
+              frameRate: { ideal: 20, max: 24 },
               facingMode: isMobile ? 'user' : undefined
             },
             audio: {
@@ -648,7 +648,12 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         const audioTrack = audioStream.getAudioTracks()[0];
         
         if (peerConnectionRef.current) {
-          peerConnectionRef.current.addTrack(audioTrack, localStream || new MediaStream());
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'audio');
+          if (sender) {
+            await sender.replaceTrack(audioTrack);
+          } else {
+            peerConnectionRef.current.addTrack(audioTrack, localStream || new MediaStream());
+          }
         }
         
         if (!localStream) {
@@ -681,17 +686,22 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const videoStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 640, max: 1280 },
-            height: { ideal: 480, max: 720 },
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
             aspectRatio: { ideal: 4/3, min: 1.2, max: 1.8 },
-            frameRate: { ideal: 24, max: 30 },
+            frameRate: { ideal: 20, max: 24 },
             facingMode: isMobile ? 'user' : undefined
           }
         });
         const videoTrack = videoStream.getVideoTracks()[0];
         
         if (peerConnectionRef.current) {
-          peerConnectionRef.current.addTrack(videoTrack, localStream || new MediaStream());
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(videoTrack);
+          } else {
+            peerConnectionRef.current.addTrack(videoTrack, localStream || new MediaStream());
+          }
         }
         
         if (!localStream) {

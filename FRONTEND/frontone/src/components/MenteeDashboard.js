@@ -7,7 +7,7 @@ import CommunityBrowser from './CommunityBrowser';
 import RobustWebRTCCall from './RobustWebRTCCall';
 import CallRequestModal from './CallRequestModal';
 import MenteeProfileEditor from './MenteeProfileEditor';
-import LandingPageFooter from './LandingPageFooter';
+
 
 import SessionsPanel from './SessionsPanel';
 import './MenteeDashboard.css';
@@ -868,59 +868,6 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             </div>
           )}
           
-          {/* Popular Blogs Section */}
-          {popularBlogs.length > 0 && (
-            <div className="popular-blogs-section">
-              <div className="section-header">
-                <h2>🔥 Trending Blogs</h2>
-                <p>Most viewed and liked content</p>
-              </div>
-              <div className="blogs-grid">
-                {popularBlogs.map(blog => (
-                  <div key={blog.id} className="blog-card" onClick={() => handleViewBlog(blog.id)}>
-                    <div className="blog-header">
-                      <h3>{blog.title}</h3>
-                      <div className="blog-stats">
-                        <span>👁️ {blog.view_count}</span>
-                        <span>❤️ {blog.likes_count}</span>
-                        <span>💬 {blog.comments_count}</span>
-                      </div>
-                    </div>
-                    <p className="blog-description">{blog.description}</p>
-                    <div className="blog-footer">
-                      <span className="blog-author">By {blog.mentor_name}</span>
-                      <span className="blog-date">{new Date(blog.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          <LandingPageFooter />
-          
-          {/* Landing Page Footer */}
-          <div className="landing-footer">
-            <div className="footer-content">
-              <div className="footer-section">
-                <h3>About PeerVerse</h3>
-                <p>Connecting students with experienced mentors for personalized guidance and career growth.</p>
-              </div>
-              <div className="footer-section">
-                <h3>Our Team</h3>
-                <p>Passionate developers and educators committed to empowering the next generation.</p>
-              </div>
-              <div className="footer-section">
-                <h3>Contact</h3>
-                <p>Email: support@peerverse.in</p>
-                <p>Phone: +91 9876543210</p>
-              </div>
-            </div>
-            <div className="footer-bottom">
-              <p>&copy; 2024 PeerVerse. All rights reserved.</p>
-            </div>
-          </div>
-          
           {/* Mentors Grid */}
           <div className="mentors-section">
             <div className="section-header">
@@ -954,6 +901,57 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 )}
               </div>
             )}
+          </div>
+          
+          {/* Popular Blogs Section */}
+          {popularBlogs.length > 0 && (
+            <div className="popular-blogs-section">
+              <div className="section-header">
+                <h2>🔥 Trending Blogs</h2>
+                <p>Most viewed and liked content</p>
+              </div>
+              <div className="blogs-grid">
+                {popularBlogs.map(blog => (
+                  <div key={blog.id} className="blog-card" onClick={() => handleViewBlog(blog.id)}>
+                    <div className="blog-header">
+                      <h3>{blog.title}</h3>
+                      <div className="blog-stats">
+                        <span>👁️ {blog.view_count}</span>
+                        <span>❤️ {blog.likes_count}</span>
+                        <span>💬 {blog.comments_count}</span>
+                      </div>
+                    </div>
+                    <p className="blog-description">{blog.description}</p>
+                    <div className="blog-footer">
+                      <span className="blog-author">By {blog.mentor_name}</span>
+                      <span className="blog-date">{new Date(blog.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Landing Page Footer */}
+          <div className="landing-footer">
+            <div className="footer-content">
+              <div className="footer-section">
+                <h3>About PeerVerse</h3>
+                <p>Connecting students with experienced mentors for personalized guidance and career growth.</p>
+              </div>
+              <div className="footer-section">
+                <h3>Our Team</h3>
+                <p>Passionate developers and educators committed to empowering the next generation.</p>
+              </div>
+              <div className="footer-section">
+                <h3>Contact</h3>
+                <p>Email: support@peerverse.in</p>
+                <p>Phone: +91 9876543210</p>
+              </div>
+            </div>
+            <div className="footer-bottom">
+              <p>&copy; 2024 PeerVerse. All rights reserved.</p>
+            </div>
           </div>
         </>
       )}
