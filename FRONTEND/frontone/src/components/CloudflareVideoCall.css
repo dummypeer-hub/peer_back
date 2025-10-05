@@ -158,6 +158,7 @@
   object-position: center;
   transform: scaleX(-1);
   background: #000;
+  border-radius: 8px;
 }
 
 .waiting-message {
@@ -212,6 +213,11 @@
   50% { opacity: 0.5; }
 }
 
+.user-info {
+  margin-top: 10px;
+  opacity: 0.7;
+}
+
 .local-video {
   position: absolute;
   top: 20px;
@@ -224,13 +230,56 @@
   background: #000;
   box-shadow: 0 8px 25px rgba(0,0,0,0.5);
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .local-video video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   transform: scaleX(-1);
+  border-radius: 12px;
+}
+
+.camera-off-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  border-radius: 12px;
+}
+
+.camera-off-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+
+.camera-off-overlay span {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.local-user-info {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 500;
 }
 
 .call-controls {
@@ -428,8 +477,37 @@
   transform: none;
 }
 
+.connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+}
+
 /* Mobile Responsive Design */
 @media (max-width: 768px) {
+  .cloudflare-video-call {
+    font-size: 14px;
+  }
+  
+  .video-container {
+    flex-direction: column;
+  }
+  
+  .remote-video {
+    width: 100%;
+    height: 70vh;
+    min-height: 300px;
+  }
+  
+  .remote-video video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    transform: scaleX(-1);
+  }
+  
   .local-video {
     width: 120px;
     height: 90px;
@@ -438,11 +516,17 @@
     border-width: 2px;
   }
   
+  .local-video video {
+    object-fit: cover;
+  }
+  
   .chat-panel {
-    width: 280px;
-    height: 300px;
-    top: 120px;
+    position: fixed;
+    bottom: 100px;
     right: 15px;
+    width: 280px;
+    height: 250px;
+    max-height: 30vh;
   }
   
   .call-controls {
@@ -482,17 +566,30 @@
 }
 
 @media (max-width: 480px) {
+  .remote-video {
+    height: 60vh;
+    min-height: 250px;
+  }
+  
   .call-controls {
     padding: 12px 15px;
     min-height: 70px;
+    flex-wrap: wrap;
+    justify-content: space-around;
   }
   
   .timer {
     font-size: 16px;
+    order: -1;
+    width: 100%;
+    text-align: center;
+    margin-bottom: 10px;
   }
   
   .control-buttons {
-    gap: 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
   }
   
   .control-btn {
@@ -504,6 +601,8 @@
   .control-btn.end-call {
     min-width: 90px;
     font-size: 13px;
+    order: 1;
+    margin-top: 5px;
   }
   
   .local-video {
@@ -514,15 +613,19 @@
   }
   
   .chat-panel {
-    width: 250px;
-    height: 250px;
-    top: 100px;
+    position: fixed;
+    bottom: 90px;
     right: 10px;
+    width: calc(100vw - 20px);
+    max-width: 300px;
+    height: 200px;
+    max-height: 25vh;
   }
   
   .media-permission-dialog {
     padding: 20px;
     margin: 10px;
+    max-width: calc(100vw - 20px);
   }
   
   .permission-header h3 {
@@ -531,5 +634,106 @@
   
   .permission-card {
     padding: 12px;
+  }
+  
+  .waiting-message {
+    padding: 20px;
+  }
+  
+  .waiting-text {
+    font-size: 16px;
+  }
+}
+
+/* Device-specific video optimizations */
+@media (orientation: landscape) and (max-height: 500px) {
+  .remote-video {
+    height: calc(100vh - 120px);
+  }
+  
+  .local-video {
+    width: 100px;
+    height: 75px;
+    top: 10px;
+    right: 10px;
+  }
+  
+  .chat-panel {
+    height: 180px;
+    max-height: 40vh;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .remote-video video {
+    object-fit: contain;
+    max-width: 100%;
+    max-height: 100%;
+  }
+  
+  .local-video {
+    width: 180px;
+    height: 135px;
+  }
+  
+  .chat-panel {
+    width: 320px;
+    height: 350px;
+  }
+}
+
+/* Desktop optimizations */
+@media (min-width: 1024px) {
+  .remote-video video {
+    object-fit: contain;
+    max-width: 100%;
+    max-height: 100%;
+  }
+  
+  .local-video {
+    width: 220px;
+    height: 165px;
+  }
+  
+  .chat-panel {
+    width: 380px;
+    height: 450px;
+  }
+}
+
+/* Cross-device video compatibility */
+.remote-video video,
+.local-video video {
+  -webkit-transform: scaleX(-1);
+  -moz-transform: scaleX(-1);
+  -ms-transform: scaleX(-1);
+  -o-transform: scaleX(-1);
+  transform: scaleX(-1);
+}
+
+/* Ensure proper aspect ratio maintenance */
+@supports (aspect-ratio: 16/9) {
+  .remote-video {
+    aspect-ratio: 16/9;
+  }
+  
+  .local-video {
+    aspect-ratio: 4/3;
+  }
+}
+
+/* Fallback for browsers without aspect-ratio support */
+@supports not (aspect-ratio: 16/9) {
+  .remote-video::before {
+    content: '';
+    display: block;
+    padding-top: 56.25%; /* 16:9 aspect ratio */
+  }
+  
+  .local-video::before {
+    content: '';
+    display: block;
+    padding-top: 75%; /* 4:3 aspect ratio */
   }
 }

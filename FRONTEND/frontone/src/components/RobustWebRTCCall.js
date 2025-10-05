@@ -111,7 +111,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             </div>
             
             <div class="permission-options">
-              <div class="permission-card" onclick="resolve(true)">
+              <div class="permission-card" data-choice="true">
                 <div class="card-icon">📹</div>
                 <div class="card-content">
                   <h4>Join with Camera & Mic</h4>
@@ -120,7 +120,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
                 <div class="card-arrow">→</div>
               </div>
               
-              <div class="permission-card" onclick="resolve(false)">
+              <div class="permission-card" data-choice="false">
                 <div class="card-icon">👁️</div>
                 <div class="card-content">
                   <h4>Join as Viewer</h4>
@@ -138,10 +138,11 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         
         document.body.appendChild(dialog);
         
-        dialog.querySelectorAll('.permission-card').forEach((card, index) => {
+        dialog.querySelectorAll('.permission-card').forEach((card) => {
           card.onclick = () => {
+            const choice = card.getAttribute('data-choice') === 'true';
             document.body.removeChild(dialog);
-            resolve(index === 0);
+            resolve(choice);
           };
         });
       });
@@ -156,7 +157,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             video: {
               width: { ideal: 640, max: 1280 },
               height: { ideal: 480, max: 720 },
-              aspectRatio: { ideal: 4/3 },
+              aspectRatio: { ideal: 4/3, min: 1, max: 2 },
               frameRate: { ideal: 24, max: 30 },
               facingMode: 'user'
             },
@@ -167,14 +168,15 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             }
           } : {
             video: {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              aspectRatio: { ideal: 16/9 },
-              frameRate: { ideal: 30 }
+              width: { ideal: 1280, min: 640 },
+              height: { ideal: 720, min: 480 },
+              aspectRatio: { ideal: 16/9, min: 1, max: 2 },
+              frameRate: { ideal: 30, min: 15 }
             },
             audio: {
               echoCancellation: true,
-              noiseSuppression: true
+              noiseSuppression: true,
+              autoGainControl: true
             }
           };
           
@@ -816,12 +818,24 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
                  connectionState === 'connected' ? 'Connected' :
                  connectionState === 'failed' ? 'Connection Failed' : 'Waiting...'}
               </div>
+              <div className="user-info">
+                <small>You are joining as: {user.role}</small>
+              </div>
             </div>
           )}
         </div>
         
         <div className="local-video">
           <video ref={localVideoRef} autoPlay playsInline muted />
+          {!localStream?.getVideoTracks()?.length && (
+            <div className="camera-off-overlay">
+              <div className="camera-off-icon">📷</div>
+              <span>Camera Off</span>
+            </div>
+          )}
+          <div className="local-user-info">
+            <span>{user.role === 'mentor' ? 'Mentor' : 'Mentee'} (You)</span>
+          </div>
         </div>
       </div>
 

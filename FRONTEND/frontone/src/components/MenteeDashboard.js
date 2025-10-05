@@ -268,6 +268,10 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     hoursLearned: 0
   });
   const [showInterestBrowser, setShowInterestBrowser] = useState(false);
+  const [recommendedMentors, setRecommendedMentors] = useState([]);
+  const [popularBlogs, setPopularBlogs] = useState([]);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackSession, setFeedbackSession] = useState(null);
 
   const mainInterests = [
     'PLACEMENT',
@@ -284,8 +288,68 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       loadUnreadCount();
       loadMenteeProfile();
       loadMenteeStats();
+      loadRecommendedMentors();
+      loadPopularBlogs();
     }
   }, [user]);
+  
+  const loadRecommendedMentors = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/mentors/recommended/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setRecommendedMentors(response.data.mentors || []);
+    } catch (error) {
+      console.error('Failed to load recommended mentors:', error);
+    }
+  };
+  
+  const loadPopularBlogs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/blogs/popular`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPopularBlogs(response.data.blogs || []);
+    } catch (error) {
+      console.error('Failed to load popular blogs:', error);
+    }
+  };
+  
+  const handleViewBlog = async (blogId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${config.API_BASE_URL}/blogs/${blogId}/view`, {
+        userId: user.id
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (error) {
+      console.error('Failed to track blog view:', error);
+    }
+  };
+  
+  const submitFeedback = async (rating, feedback) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${config.API_BASE_URL}/session-feedback`, {
+        sessionId: feedbackSession.id,
+        menteeId: user.id,
+        mentorId: feedbackSession.mentor_id,
+        rating,
+        feedback
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setShowFeedbackModal(false);
+      setFeedbackSession(null);
+      alert('Thank you for your feedback!');
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+      alert('Failed to submit feedback. Please try again.');
+    }
+  };
 
   const loadMenteeStats = async () => {
     try {
@@ -571,6 +635,16 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   };
 
   const handleCallEnd = () => {
+    // Show feedback modal after call ends
+    if (activeCall) {
+      setFeedbackSession({
+        id: activeCall.callId,
+        mentor_id: selectedMentor?.id,
+        rating: 0,
+        feedback: ''
+      });
+      setShowFeedbackModal(true);
+    }
     setActiveCall(null);
   };
 
@@ -626,6 +700,12 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
               onClick={() => setCurrentSection('profile')}
             >
               Profile
+            </button>
+            <button 
+              className={`nav-link ${currentSection === 'favorites' ? 'active' : ''}`}
+              onClick={() => setCurrentSection('favorites')}
+            >
+              Favorites
             </button>
             <button className="nav-link">Wallet</button>
           </nav>
@@ -774,10 +854,74 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             </div>
           </div>
 
+          {/* Recommended Mentors Section */}
+          {recommendedMentors.length > 0 && (
+            <div className="recommended-section">
+              <div className="section-header">
+                <h2>🎯 Recommended for You</h2>
+                <p>Mentors matching your interests</p>
+              </div>
+              <div className="mentors-grid">
+                {recommendedMentors.map(renderMentorCard)}
+              </div>
+            </div>
+          )}
+          
+          {/* Popular Blogs Section */}
+          {popularBlogs.length > 0 && (
+            <div className="popular-blogs-section">
+              <div className="section-header">
+                <h2>🔥 Trending Blogs</h2>
+                <p>Most viewed and liked content</p>
+              </div>
+              <div className="blogs-grid">
+                {popularBlogs.map(blog => (
+                  <div key={blog.id} className="blog-card" onClick={() => handleViewBlog(blog.id)}>
+                    <div className="blog-header">
+                      <h3>{blog.title}</h3>
+                      <div className="blog-stats">
+                        <span>👁️ {blog.view_count}</span>
+                        <span>❤️ {blog.likes_count}</span>
+                        <span>💬 {blog.comments_count}</span>
+                      </div>
+                    </div>
+                    <p className="blog-description">{blog.description}</p>
+                    <div className="blog-footer">
+                      <span className="blog-author">By {blog.mentor_name}</span>
+                      <span className="blog-date">{new Date(blog.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Landing Page Footer */}
+          <div className="landing-footer">
+            <div className="footer-content">
+              <div className="footer-section">
+                <h3>About PeerVerse</h3>
+                <p>Connecting students with experienced mentors for personalized guidance and career growth.</p>
+              </div>
+              <div className="footer-section">
+                <h3>Our Team</h3>
+                <p>Passionate developers and educators committed to empowering the next generation.</p>
+              </div>
+              <div className="footer-section">
+                <h3>Contact</h3>
+                <p>Email: support@peerverse.in</p>
+                <p>Phone: +91 9876543210</p>
+              </div>
+            </div>
+            <div className="footer-bottom">
+              <p>&copy; 2024 PeerVerse. All rights reserved.</p>
+            </div>
+          </div>
+          
           {/* Mentors Grid */}
           <div className="mentors-section">
             <div className="section-header">
-              <h2>Available Mentors</h2>
+              <h2>All Available Mentors</h2>
               <div className="search-results-info">
                 <span className="results-count">
                   {filteredMentors.length} mentors found
@@ -975,6 +1119,29 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
         />
       )}
 
+      {currentSection === 'favorites' && (
+        <div className="favorites-section">
+          <div className="section-header">
+            <h2>⭐ Your Favorite Mentors</h2>
+            <p>Mentors you've saved for quick access</p>
+          </div>
+          {favorites.length > 0 ? (
+            <div className="mentors-grid">
+              {mentors.filter(mentor => favorites.includes(mentor.id)).map(renderMentorCard)}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-icon">⭐</div>
+              <h3>No Favorite Mentors Yet</h3>
+              <p>Start exploring mentors and add them to your favorites!</p>
+              <button onClick={() => setCurrentSection('mentors')} className="cta-button">
+                Browse Mentors
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      
       {currentSection === 'profile' && (
         <div className="profile-section">
           <MenteeProfileEditor 
@@ -1136,6 +1303,45 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           onCallStart={handleCallStart}
           onClose={() => setShowCallModal(false)}
         />
+      )}
+      
+      {/* Feedback Modal */}
+      {showFeedbackModal && feedbackSession && (
+        <div className="feedback-modal-overlay" onClick={() => setShowFeedbackModal(false)}>
+          <div className="feedback-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Rate Your Session</h3>
+            <p>How was your session with the mentor?</p>
+            <div className="rating-section">
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  className={`star-btn ${feedbackSession.rating >= star ? 'active' : ''}`}
+                  onClick={() => setFeedbackSession({...feedbackSession, rating: star})}
+                >
+                  ⭐
+                </button>
+              ))}
+            </div>
+            <textarea
+              placeholder="Share your feedback (optional)"
+              value={feedbackSession.feedback || ''}
+              onChange={(e) => setFeedbackSession({...feedbackSession, feedback: e.target.value})}
+              className="feedback-textarea"
+            />
+            <div className="feedback-actions">
+              <button onClick={() => setShowFeedbackModal(false)} className="cancel-btn">
+                Cancel
+              </button>
+              <button 
+                onClick={() => submitFeedback(feedbackSession.rating, feedbackSession.feedback)}
+                className="submit-btn"
+                disabled={!feedbackSession.rating}
+              >
+                Submit Feedback
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

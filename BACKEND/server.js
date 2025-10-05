@@ -246,6 +246,23 @@ pool.connect(async (err, client, release) => {
           created_at TIMESTAMP DEFAULT NOW()
         );
         
+        CREATE TABLE IF NOT EXISTS mentor_ratings (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          total_rating DECIMAL(3,2) DEFAULT 0,
+          rating_count INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS blog_views (
+          id SERIAL PRIMARY KEY,
+          blog_id INTEGER NOT NULL REFERENCES blogs(id),
+          user_id INTEGER REFERENCES users(id),
+          ip_address INET,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
 
         
         CREATE TABLE IF NOT EXISTS notifications (
@@ -365,6 +382,9 @@ pool.connect(async (err, client, release) => {
         CREATE INDEX IF NOT EXISTS idx_mentee_profiles_user_id ON mentee_profiles(user_id);
         CREATE INDEX IF NOT EXISTS idx_mentor_earnings_mentor_id ON mentor_earnings(mentor_id);
         CREATE INDEX IF NOT EXISTS idx_session_feedback_session_id ON session_feedback(session_id);
+        CREATE INDEX IF NOT EXISTS idx_mentor_ratings_mentor_id ON mentor_ratings(mentor_id);
+        CREATE INDEX IF NOT EXISTS idx_blog_views_blog_id ON blog_views(blog_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mentor_ratings_unique ON mentor_ratings(mentor_id);
       `);
       console.log('Video calls and WebRTC tables created/verified successfully');
     } catch (tableError) {
@@ -372,6 +392,222 @@ pool.connect(async (err, client, release) => {
     }
     
     release();
+  }
+});
+
+// Get recommended mentors based on mentee interests
+app.get('/api/mentors/recommended/:menteeId', async (req, res) => {
+  try {
+    const { menteeId } = req.params;
+    
+    // Get mentee interests
+    const menteeProfile = await pool.query(
+      'SELECT interests FROM mentee_profiles WHERE user_id = $1',
+      [menteeId]
+    );
+    
+    let menteeInterests = [];
+    if (menteeProfile.rows.length > 0 && menteeProfile.rows[0].interests) {
+      menteeInterests = menteeProfile.rows[0].interests;
+    }
+    
+    // Get mentors with matching interests
+    const result = await pool.query(`
+      SELECT mp.user_id, mp.name, mp.bio, mp.profile_picture, mp.skills, mp.interests, 
+             u.username, COALESCE(mr.total_rating, 0) as rating, COALESCE(mr.rating_count, 0) as review_count
+      FROM mentor_profiles mp 
+      JOIN users u ON mp.user_id = u.id 
+      LEFT JOIN mentor_ratings mr ON mp.user_id = mr.mentor_id
+      WHERE u.role = 'mentor' AND mp.name IS NOT NULL AND mp.name != ''
+      ORDER BY mr.total_rating DESC NULLS LAST
+      LIMIT 50
+    `);
+    
+    const mentors = result.rows.map(mentor => {
+      let mentorInterests = [];
+      try {
+        const interestsData = mentor.interests ? (typeof mentor.interests === 'string' ? JSON.parse(mentor.interests) : mentor.interests) : [];
+        if (Array.isArray(interestsData)) {
+          mentorInterests = interestsData;
+        } else if (interestsData.interests) {
+          mentorInterests = interestsData.interests;
+        }
+      } catch (e) { mentorInterests = []; }
+      
+      // Calculate match score
+      const commonInterests = mentorInterests.filter(interest => 
+        menteeInterests.includes(interest)
+      ).length;
+      const matchScore = menteeInterests.length > 0 ? (commonInterests / menteeInterests.length) * 100 : 0;
+      
+      return {
+        id: mentor.user_id,
+        name: mentor.name || mentor.username,
+        bio: mentor.bio || 'Experienced mentor ready to help you grow.',
+        profilePicture: mentor.profile_picture,
+        skills: mentor.skills || [],
+        interests: mentorInterests,
+        rating: parseFloat(mentor.rating) || 0,
+        reviewCount: parseInt(mentor.review_count) || 0,
+        matchScore
+      };
+    });
+    
+    // Sort by match score and rating, take top 9
+    const recommended = mentors
+      .sort((a, b) => (b.matchScore * 0.7 + b.rating * 0.3) - (a.matchScore * 0.7 + a.rating * 0.3))
+      .slice(0, 9);
+    
+    res.json({ mentors: recommended });
+  } catch (error) {
+    console.error('Get recommended mentors error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get favorite mentors
+app.get('/api/mentee/:menteeId/favorite-mentors', async (req, res) => {
+  try {
+    const { menteeId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT mp.user_id, mp.name, mp.bio, mp.profile_picture, mp.skills, 
+             u.username, COALESCE(mr.total_rating, 0) as rating, COALESCE(mr.rating_count, 0) as review_count,
+             mf.created_at as favorited_at
+      FROM mentee_favorites mf
+      JOIN mentor_profiles mp ON mf.mentor_id = mp.user_id
+      JOIN users u ON mp.user_id = u.id
+      LEFT JOIN mentor_ratings mr ON mp.user_id = mr.mentor_id
+      WHERE mf.mentee_id = $1
+      ORDER BY mf.created_at DESC
+    `, [menteeId]);
+    
+    const favorites = result.rows.map(mentor => ({
+      id: mentor.user_id,
+      name: mentor.name || mentor.username,
+      bio: mentor.bio || 'Experienced mentor ready to help you grow.',
+      profilePicture: mentor.profile_picture,
+      skills: mentor.skills || [],
+      rating: parseFloat(mentor.rating) || 0,
+      reviewCount: parseInt(mentor.review_count) || 0,
+      favoritedAt: mentor.favorited_at
+    }));
+    
+    res.json({ favorites });
+  } catch (error) {
+    console.error('Get favorite mentors error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Submit session feedback and update mentor rating
+app.post('/api/session-feedback', async (req, res) => {
+  try {
+    const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
+    
+    // Insert feedback
+    await pool.query(
+      'INSERT INTO session_feedback (session_id, mentee_id, mentor_id, rating, feedback) VALUES ($1, $2, $3, $4, $5)',
+      [sessionId, menteeId, mentorId, rating, feedback]
+    );
+    
+    // Update mentor rating
+    const existingRating = await pool.query(
+      'SELECT total_rating, rating_count FROM mentor_ratings WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    if (existingRating.rows.length > 0) {
+      const current = existingRating.rows[0];
+      const newCount = current.rating_count + 1;
+      const newTotal = ((current.total_rating * current.rating_count) + rating) / newCount;
+      
+      await pool.query(
+        'UPDATE mentor_ratings SET total_rating = $1, rating_count = $2, updated_at = NOW() WHERE mentor_id = $3',
+        [newTotal, newCount, mentorId]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO mentor_ratings (mentor_id, total_rating, rating_count) VALUES ($1, $2, $3)',
+        [mentorId, rating, 1]
+      );
+    }
+    
+    res.json({ message: 'Feedback submitted successfully' });
+  } catch (error) {
+    console.error('Submit feedback error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get popular blogs (most views and likes)
+app.get('/api/blogs/popular', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT b.id, b.title, b.description, b.content, b.category, b.tags, b.images,
+             b.likes_count, b.comments_count, b.created_at, b.mentor_id,
+             COALESCE(mp.name, u.username) as mentor_name,
+             mp.profile_picture as mentor_avatar,
+             COUNT(bv.id) as view_count
+      FROM blogs b
+      JOIN users u ON b.mentor_id = u.id
+      LEFT JOIN mentor_profiles mp ON b.mentor_id = mp.user_id
+      LEFT JOIN blog_views bv ON b.id = bv.blog_id
+      WHERE b.is_published = true
+      GROUP BY b.id, b.title, b.description, b.content, b.category, b.tags, b.images,
+               b.likes_count, b.comments_count, b.created_at, b.mentor_id, mp.name, u.username, mp.profile_picture
+      ORDER BY (b.likes_count * 2 + COUNT(bv.id)) DESC
+      LIMIT 9
+    `);
+    
+    const blogs = result.rows.map(blog => ({
+      id: blog.id,
+      title: blog.title,
+      description: blog.description,
+      content: blog.content,
+      category: blog.category,
+      tags: blog.tags || [],
+      images: blog.images || [],
+      likes_count: blog.likes_count || 0,
+      comments_count: blog.comments_count || 0,
+      view_count: parseInt(blog.view_count) || 0,
+      created_at: blog.created_at,
+      mentor_id: blog.mentor_id,
+      mentor_name: blog.mentor_name,
+      mentor_avatar: blog.mentor_avatar
+    }));
+    
+    res.json({ blogs });
+  } catch (error) {
+    console.error('Get popular blogs error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Track blog view
+app.post('/api/blogs/:blogId/view', async (req, res) => {
+  try {
+    const { blogId } = req.params;
+    const { userId } = req.body;
+    const ipAddress = req.ip;
+    
+    // Check if view already exists for this user/IP in last 24 hours
+    const existing = await pool.query(
+      'SELECT id FROM blog_views WHERE blog_id = $1 AND (user_id = $2 OR ip_address = $3) AND created_at > NOW() - INTERVAL \'24 hours\'',
+      [blogId, userId, ipAddress]
+    );
+    
+    if (existing.rows.length === 0) {
+      await pool.query(
+        'INSERT INTO blog_views (blog_id, user_id, ip_address) VALUES ($1, $2, $3)',
+        [blogId, userId, ipAddress]
+      );
+    }
+    
+    res.json({ message: 'View tracked' });
+  } catch (error) {
+    console.error('Track blog view error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
