@@ -190,7 +190,6 @@ const VideoCall = ({ callId, user, onEndCall }) => {
 
   const initializeCall = async () => {
     try {
-      // Check if already joined
       if (isJoined) {
         console.log('Already joined, skipping initialization');
         return;
@@ -198,10 +197,10 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       
       console.log('Initializing WebRTC call for user:', user.id);
       
-      // Check media permissions first
+      // Show media permission dialog first
       const hasPermissions = await checkMediaPermissions();
       
-      // Get WebRTC configuration with TURN servers
+      // Get WebRTC configuration
       const configResponse = await axios.get(`${config.API_BASE_URL}/webrtc/status/${user.id}`);
       const webrtcConfig = {
         iceServers: configResponse.data.iceServers || [
@@ -218,8 +217,6 @@ const VideoCall = ({ callId, user, onEndCall }) => {
         rtcpMuxPolicy: 'require'
       };
       
-      console.log('WebRTC config:', webrtcConfig);
-      
       // Create WebRTC session
       await axios.post(`${config.API_BASE_URL}/webrtc/session/create`, {
         callId,
@@ -227,14 +224,14 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       });
       
       setIsJoined(true);
-      console.log('WebRTC session initialized');
+      console.log('WebRTC session initialized - joining call regardless of media permissions');
       
-      // Try to initialize media if permissions granted
+      // Initialize media if permissions granted
       if (hasPermissions) {
         await initializeMedia();
       }
       
-      // Notify others about joining
+      // Join call even without media
       if (socket) {
         socket.emit('user_joined', { callId, userId: user.id, username: user.username });
       }
