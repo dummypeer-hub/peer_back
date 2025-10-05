@@ -32,6 +32,8 @@ const MentorDashboard = ({ user, onLogout }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showCreateBlog, setShowCreateBlog] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [feedback, setFeedback] = useState([]);
+  const [overallRating, setOverallRating] = useState({ rating: 0, count: 0 });
   
   // All function definitions before useEffect
   const handleJoinSession = (callId) => {
@@ -84,6 +86,22 @@ const MentorDashboard = ({ user, onLogout }) => {
       console.error('Failed to load notifications:', error);
     }
   };
+
+  const loadFeedback = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/mentor/${user.id}/feedback`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setFeedback(response.data.feedback || []);
+      setOverallRating(response.data.overallRating || { rating: 0, count: 0 });
+    } catch (error) {
+      console.error('Failed to load feedback:', error);
+    }
+  };
   
   const loadProfileData = async () => {
     try {
@@ -117,10 +135,12 @@ const MentorDashboard = ({ user, onLogout }) => {
       loadNotifications();
       loadStats();
       loadUpcomingSessions();
+      loadFeedback();
       
       const interval = setInterval(() => {
         loadNotifications();
         loadStats();
+        loadFeedback();
       }, 30000);
       
       return () => clearInterval(interval);
@@ -321,6 +341,67 @@ const MentorDashboard = ({ user, onLogout }) => {
     </div>
   );
 
+  const renderFeedback = () => (
+    <div className="feedback-content">
+      <div className="feedback-header">
+        <h3>My Feedback & Ratings</h3>
+        <div className="overall-rating">
+          <div className="rating-display">
+            <span className="rating-number">{overallRating.rating.toFixed(1)}</span>
+            <div className="stars">
+              {[1, 2, 3, 4, 5].map(star => (
+                <span 
+                  key={star} 
+                  className={`star ${star <= Math.round(overallRating.rating) ? 'filled' : ''}`}
+                >
+                  ⭐
+                </span>
+              ))}
+            </div>
+            <span className="rating-count">({overallRating.count} reviews)</span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="feedback-list">
+        {feedback.length > 0 ? (
+          feedback.map((item, index) => (
+            <div key={index} className="feedback-item">
+              <div className="feedback-header-item">
+                <div className="mentee-info">
+                  <strong>{item.mentee_name}</strong>
+                  <span className="session-date">
+                    {new Date(item.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="rating-stars">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <span 
+                      key={star} 
+                      className={`star ${star <= item.rating ? 'filled' : ''}`}
+                    >
+                      ⭐
+                    </span>
+                  ))}
+                  <span className="rating-number">({item.rating}/5)</span>
+                </div>
+              </div>
+              {item.feedback && (
+                <div className="feedback-text">
+                  "{item.feedback}"
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="no-feedback">
+            <p>No feedback received yet. Complete more sessions to receive feedback from mentees!</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   const renderSettings = () => (
     <div className="settings-content">
       <h3>Settings</h3>
@@ -385,6 +466,7 @@ const MentorDashboard = ({ user, onLogout }) => {
       case 'blogs': return renderBlogs();
       case 'community': return renderCommunity();
       case 'wallet': return renderWallet();
+      case 'feedback': return renderFeedback();
       case 'notifications': return renderNotifications();
       case 'settings': return renderSettings();
       default: return renderHome();
@@ -444,6 +526,12 @@ const MentorDashboard = ({ user, onLogout }) => {
             onClick={() => setActiveTab('wallet')}
           >
             💰 Wallet
+          </button>
+          <button 
+            className={`nav-btn ${activeTab === 'feedback' ? 'active' : ''}`}
+            onClick={() => setActiveTab('feedback')}
+          >
+            ⭐ Feedback
           </button>
           <button 
             className={`nav-btn ${activeTab === 'notifications' ? 'active' : ''}`}

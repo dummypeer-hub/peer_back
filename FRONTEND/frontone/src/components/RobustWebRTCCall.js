@@ -15,6 +15,8 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const [newMessage, setNewMessage] = useState('');
   const [timeLeft, setTimeLeft] = useState(600);
   const [connectionState, setConnectionState] = useState('connecting');
+  const [isVisitorMode, setIsVisitorMode] = useState(false);
+  const [canToggleMedia, setCanToggleMedia] = useState(true);
 
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
@@ -153,25 +155,13 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         try {
           const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
           
-          const constraints = isMobile ? {
+          const constraints = {
             video: {
               width: { ideal: 640, max: 1280 },
               height: { ideal: 480, max: 720 },
-              aspectRatio: { ideal: 4/3, min: 1, max: 2 },
+              aspectRatio: { ideal: 4/3, min: 1.2, max: 1.8 },
               frameRate: { ideal: 24, max: 30 },
-              facingMode: 'user'
-            },
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            }
-          } : {
-            video: {
-              width: { ideal: 1280, min: 640 },
-              height: { ideal: 720, min: 480 },
-              aspectRatio: { ideal: 16/9, min: 1, max: 2 },
-              frameRate: { ideal: 30, min: 15 }
+              facingMode: isMobile ? 'user' : undefined
             },
             audio: {
               echoCancellation: true,
@@ -187,14 +177,18 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           stream = new MediaStream();
         }
       } else {
-        // User chose viewer mode
+        // User chose visitor mode
         stream = new MediaStream();
-        console.log('✅ Joining as viewer (no media)');
+        setIsVisitorMode(true);
+        setCanToggleMedia(true);
+        console.log('✅ Joining as visitor (no media)');
       }
       
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        // Force aspect ratio for consistent display
+        localVideoRef.current.style.objectFit = 'cover';
       }
       
       // Track this stream globally to prevent conflicts
@@ -217,6 +211,8 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         setRemoteStream(stream);
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = stream;
+          // Force aspect ratio for consistent display
+          remoteVideoRef.current.style.objectFit = 'cover';
         }
       };
 
@@ -365,6 +361,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       console.log(`👥 Another participant joined call ${data.callId}, total: ${data.participantCount}`);
       if (data.participantCount >= 2 && user.role === 'mentor') {
         console.log('📤 Both participants ready, mentor will create offer in 3 seconds...');
+      }
+      // Update UI for mentee when mentor joins
+      if (user.role === 'mentee') {
+        setConnectionState('connecting');
       }
     });
 
@@ -636,22 +636,80 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     }, 1000);
   };
 
-  const toggleMute = () => {
-    if (localStream) {
+  const toggleMute = async () => {
+    if (localStream && localStream.getAudioTracks().length > 0) {
       const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
+      audioTrack.enabled = !audioTrack.enabled;
+      setIsMuted(!audioTrack.enabled);
+    } else if (isVisitorMode || canToggleMedia) {
+      // Enable audio for visitor mode
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioTrack = audioStream.getAudioTracks()[0];
+        
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.addTrack(audioTrack, localStream || new MediaStream());
+        }
+        
+        if (!localStream) {
+          const newStream = new MediaStream([audioTrack]);
+          setLocalStream(newStream);
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = newStream;
+          }
+        } else {
+          localStream.addTrack(audioTrack);
+        }
+        
+        setIsMuted(false);
+        setIsVisitorMode(false);
+      } catch (error) {
+        console.error('Failed to enable audio:', error);
+        alert('Failed to enable microphone. Please check permissions.');
       }
     }
   };
 
-  const toggleVideo = () => {
-    if (localStream) {
+  const toggleVideo = async () => {
+    if (localStream && localStream.getVideoTracks().length > 0) {
       const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOff(!videoTrack.enabled);
+      videoTrack.enabled = !videoTrack.enabled;
+      setIsVideoOff(!videoTrack.enabled);
+    } else if (isVisitorMode || canToggleMedia) {
+      // Enable video for visitor mode
+      try {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640, max: 1280 },
+            height: { ideal: 480, max: 720 },
+            aspectRatio: { ideal: 4/3, min: 1.2, max: 1.8 },
+            frameRate: { ideal: 24, max: 30 },
+            facingMode: isMobile ? 'user' : undefined
+          }
+        });
+        const videoTrack = videoStream.getVideoTracks()[0];
+        
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.addTrack(videoTrack, localStream || new MediaStream());
+        }
+        
+        if (!localStream) {
+          const newStream = new MediaStream([videoTrack]);
+          setLocalStream(newStream);
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = newStream;
+            localVideoRef.current.style.objectFit = 'cover';
+          }
+        } else {
+          localStream.addTrack(videoTrack);
+        }
+        
+        setIsVideoOff(false);
+        setIsVisitorMode(false);
+      } catch (error) {
+        console.error('Failed to enable video:', error);
+        alert('Failed to enable camera. Please check permissions.');
       }
     }
   };
@@ -807,11 +865,13 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     <div className="cloudflare-video-call">
       <div className="video-container">
         <div className="remote-video">
-          <video ref={remoteVideoRef} autoPlay playsInline />
+          <video ref={remoteVideoRef} autoPlay playsInline style={{ objectFit: 'cover' }} />
           {!remoteStream && (
             <div className="waiting-message">
               <div className="waiting-icon">👥</div>
-              <div className="waiting-text">Waiting for other participant...</div>
+              <div className="waiting-text">
+                {user.role === 'mentor' ? 'Waiting for mentee to join...' : 'Waiting for mentor to join...'}
+              </div>
               <div className="connection-status">
                 <span className={`status-indicator ${connectionState}`}></span>
                 {connectionState === 'connecting' ? 'Connecting...' : 
@@ -819,22 +879,23 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
                  connectionState === 'failed' ? 'Connection Failed' : 'Waiting...'}
               </div>
               <div className="user-info">
-                <small>You are joining as: {user.role}</small>
+                <small>You are joining as: {user.role} {isVisitorMode ? '(Visitor Mode)' : ''}</small>
               </div>
             </div>
           )}
         </div>
         
         <div className="local-video">
-          <video ref={localVideoRef} autoPlay playsInline muted />
-          {!localStream?.getVideoTracks()?.length && (
+          <video ref={localVideoRef} autoPlay playsInline muted style={{ objectFit: 'cover' }} />
+          {(!localStream?.getVideoTracks()?.length || isVideoOff) && (
             <div className="camera-off-overlay">
               <div className="camera-off-icon">📷</div>
-              <span>Camera Off</span>
+              <span>{isVisitorMode ? 'Visitor Mode' : 'Camera Off'}</span>
             </div>
           )}
           <div className="local-user-info">
             <span>{user.role === 'mentor' ? 'Mentor' : 'Mentee'} (You)</span>
+            {isVisitorMode && <span className="visitor-badge">Visitor</span>}
           </div>
         </div>
       </div>
@@ -852,18 +913,18 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         <div className="control-buttons">
           <button 
             onClick={toggleMute}
-            className={`control-btn ${isMuted ? 'muted' : ''}`}
-            title={isMuted ? 'Unmute' : 'Mute'}
+            className={`control-btn ${isMuted || (!localStream?.getAudioTracks()?.length && !isVisitorMode) ? 'muted' : ''}`}
+            title={isMuted || (!localStream?.getAudioTracks()?.length && !isVisitorMode) ? 'Enable Microphone' : 'Mute'}
           >
-            {isMuted ? '🔇' : '🎤'}
+            {isMuted || (!localStream?.getAudioTracks()?.length && !isVisitorMode) ? '🔇' : '🎤'}
           </button>
           
           <button 
             onClick={toggleVideo}
-            className={`control-btn ${isVideoOff ? 'video-off' : ''}`}
-            title={isVideoOff ? 'Turn on video' : 'Turn off video'}
+            className={`control-btn ${isVideoOff || (!localStream?.getVideoTracks()?.length && !isVisitorMode) ? 'video-off' : ''}`}
+            title={isVideoOff || (!localStream?.getVideoTracks()?.length && !isVisitorMode) ? 'Enable Camera' : 'Turn off video'}
           >
-            {isVideoOff ? '📹' : '📷'}
+            {isVideoOff || (!localStream?.getVideoTracks()?.length && !isVisitorMode) ? '📹' : '📷'}
           </button>
           
           <button 
@@ -924,7 +985,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           />
           <button 
             onClick={sendMessage}
-            disabled={!newMessage.trim() || !isConnected}
+            disabled={!newMessage.trim()}
           >
             Send
           </button>

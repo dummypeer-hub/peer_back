@@ -154,7 +154,7 @@
 .remote-video video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
   transform: scaleX(-1);
   background: #000;
@@ -280,6 +280,19 @@
   border-radius: 12px;
   font-size: 10px;
   font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.visitor-badge {
+  background: #667eea;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .call-controls {
@@ -503,7 +516,7 @@
   .remote-video video {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover;
     object-position: center;
     transform: scaleX(-1);
   }
@@ -667,7 +680,7 @@
 /* Tablet optimizations */
 @media (min-width: 768px) and (max-width: 1024px) {
   .remote-video video {
-    object-fit: contain;
+    object-fit: cover;
     max-width: 100%;
     max-height: 100%;
   }
@@ -686,7 +699,7 @@
 /* Desktop optimizations */
 @media (min-width: 1024px) {
   .remote-video video {
-    object-fit: contain;
+    object-fit: cover;
     max-width: 100%;
     max-height: 100%;
   }
@@ -712,28 +725,20 @@
   transform: scaleX(-1);
 }
 
-/* Ensure proper aspect ratio maintenance */
-@supports (aspect-ratio: 16/9) {
-  .remote-video {
-    aspect-ratio: 16/9;
-  }
-  
-  .local-video {
-    aspect-ratio: 4/3;
-  }
+/* Consistent video aspect ratios */
+.remote-video video,
+.local-video video {
+  aspect-ratio: 4/3;
+  min-width: 100%;
+  min-height: 100%;
 }
 
-/* Fallback for browsers without aspect-ratio support */
-@supports not (aspect-ratio: 16/9) {
-  .remote-video::before {
-    content: '';
-    display: block;
-    padding-top: 56.25%; /* 16:9 aspect ratio */
-  }
-  
-  .local-video::before {
-    content: '';
-    display: block;
-    padding-top: 75%; /* 4:3 aspect ratio */
+/* Mobile video optimizations */
+@media (max-width: 768px) {
+  .remote-video video,
+  .local-video video {
+    aspect-ratio: 4/3;
+    object-fit: cover;
+    object-position: center;
   }
 }

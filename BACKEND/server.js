@@ -533,9 +533,49 @@ app.post('/api/session-feedback', async (req, res) => {
       );
     }
     
+    // Clear cache to update mentor ratings
+    clearCachePattern(`mentor_${mentorId}`);
+    clearCachePattern('mentors_list');
+    
     res.json({ message: 'Feedback submitted successfully' });
   } catch (error) {
     console.error('Submit feedback error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get mentor feedback and ratings
+app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT sf.rating, sf.feedback, sf.created_at, sf.session_id,
+             u.username as mentee_name
+      FROM session_feedback sf
+      JOIN users u ON sf.mentee_id = u.id
+      WHERE sf.mentor_id = $1
+      ORDER BY sf.created_at DESC
+      LIMIT 50
+    `, [mentorId]);
+    
+    // Get overall rating
+    const ratingResult = await pool.query(
+      'SELECT total_rating, rating_count FROM mentor_ratings WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    const overallRating = ratingResult.rows.length > 0 ? {
+      rating: parseFloat(ratingResult.rows[0].total_rating) || 0,
+      count: parseInt(ratingResult.rows[0].rating_count) || 0
+    } : { rating: 0, count: 0 };
+    
+    res.json({ 
+      feedback: result.rows,
+      overallRating
+    });
+  } catch (error) {
+    console.error('Get mentor feedback error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -621,8 +661,13 @@ const limiter = rateLimit({
 
 app.use(cors({
   origin: ['https://peerverse-final.vercel.app', 'https://peerverse.in', 'https://www.peerverse.in', 'http://localhost:3000', 'http://localhost:3001'],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Apply rate limiter only to auth routes
@@ -634,6 +679,15 @@ app.use('/api/verify-signup', limiter);
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'PeerSync Backend is running!' });
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // TURN credentials endpoint for WebRTC
@@ -1232,10 +1286,14 @@ app.get('/api/mentors', async (req, res) => {
       return res.json({ mentors: cached });
     }
     
-    const result = await pool.query(
-      'SELECT mp.user_id, mp.name, mp.bio, mp.profile_picture, mp.skills, mp.interests, mp.education, mp.background, mp.languages, mp.availability, u.username FROM mentor_profiles mp JOIN users u ON mp.user_id = u.id WHERE u.role = $1 AND mp.name IS NOT NULL AND mp.name != \'\'',
-      ['mentor']
-    );
+    const result = await pool.query(`
+      SELECT mp.user_id, mp.name, mp.bio, mp.profile_picture, mp.skills, mp.interests, mp.education, mp.background, mp.languages, mp.availability, 
+             u.username, COALESCE(mr.total_rating, 0) as rating, COALESCE(mr.rating_count, 0) as review_count
+      FROM mentor_profiles mp 
+      JOIN users u ON mp.user_id = u.id 
+      LEFT JOIN mentor_ratings mr ON mp.user_id = mr.mentor_id
+      WHERE u.role = $1 AND mp.name IS NOT NULL AND mp.name != ''
+    `, ['mentor']);
     
     const mentors = result.rows.map(mentor => {
       // Parse JSON fields safely
@@ -1324,8 +1382,8 @@ app.get('/api/mentors', async (req, res) => {
         background,
         languages,
         availability,
-        rating: 4.8, // Default rating
-        reviewCount: Math.floor(Math.random() * 50) + 10 // Random review count for demo
+        rating: parseFloat(mentor.rating) || 0,
+        reviewCount: parseInt(mentor.review_count) || 0
       };
     });
     

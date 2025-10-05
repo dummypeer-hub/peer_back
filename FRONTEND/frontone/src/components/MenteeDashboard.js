@@ -7,6 +7,7 @@ import CommunityBrowser from './CommunityBrowser';
 import RobustWebRTCCall from './RobustWebRTCCall';
 import CallRequestModal from './CallRequestModal';
 import MenteeProfileEditor from './MenteeProfileEditor';
+import LandingPageFooter from './LandingPageFooter';
 
 import SessionsPanel from './SessionsPanel';
 import './MenteeDashboard.css';
@@ -869,31 +870,36 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           
           {/* Popular Blogs Section */}
           {popularBlogs.length > 0 && (
-            <div className="popular-blogs-section">
-              <div className="section-header">
-                <h2>🔥 Trending Blogs</h2>
-                <p>Most viewed and liked content</p>
-              </div>
-              <div className="blogs-grid">
-                {popularBlogs.map(blog => (
-                  <div key={blog.id} className="blog-card" onClick={() => handleViewBlog(blog.id)}>
-                    <div className="blog-header">
-                      <h3>{blog.title}</h3>
-                      <div className="blog-stats">
-                        <span>👁️ {blog.view_count}</span>
-                        <span>❤️ {blog.likes_count}</span>
-                        <span>💬 {blog.comments_count}</span>
+            {/* Popular Blogs Section */}
+            {popularBlogs.length > 0 && (
+              <div className="popular-blogs-section">
+                <div className="section-header">
+                  <h2>🔥 Trending Blogs</h2>
+                  <p>Most viewed and liked content</p>
+                </div>
+                <div className="blogs-grid">
+                  {popularBlogs.map(blog => (
+                    <div key={blog.id} className="blog-card" onClick={() => handleViewBlog(blog.id)}>
+                      <div className="blog-header">
+                        <h3>{blog.title}</h3>
+                        <div className="blog-stats">
+                          <span>👁️ {blog.view_count}</span>
+                          <span>❤️ {blog.likes_count}</span>
+                          <span>💬 {blog.comments_count}</span>
+                        </div>
+                      </div>
+                      <p className="blog-description">{blog.description}</p>
+                      <div className="blog-footer">
+                        <span className="blog-author">By {blog.mentor_name}</span>
+                        <span className="blog-date">{new Date(blog.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <p className="blog-description">{blog.description}</p>
-                    <div className="blog-footer">
-                      <span className="blog-author">By {blog.mentor_name}</span>
-                      <span className="blog-date">{new Date(blog.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+            
+            <LandingPageFooter />
           )}
           
           {/* Landing Page Footer */}
