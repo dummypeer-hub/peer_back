@@ -274,8 +274,8 @@ app.post('/api/verify-signup', async (req, res) => {
     
     // Create user in database
     const result = await pool.query(
-      'INSERT INTO users (username, email, phone, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, phone, role',
-      [username, email, phone, hashedPassword, role, true]
+      'INSERT INTO users (username, email, phone, password_hash, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, phone, role',
+      [username, email, phone, hashedPassword, role]
     );
     
     const user = result.rows[0];

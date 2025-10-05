@@ -246,26 +246,7 @@ pool.connect(async (err, client, release) => {
           created_at TIMESTAMP DEFAULT NOW()
         );
         
-        CREATE TABLE IF NOT EXISTS otp_codes (
-          id SERIAL PRIMARY KEY,
-          email VARCHAR(255) NOT NULL,
-          otp_code VARCHAR(6) NOT NULL,
-          purpose VARCHAR(20) NOT NULL,
-          expires_at TIMESTAMP NOT NULL,
-          is_used BOOLEAN DEFAULT FALSE,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-        
-        CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
-          username VARCHAR(255) UNIQUE NOT NULL,
-          email VARCHAR(255) NOT NULL,
-          phone VARCHAR(20),
-          password_hash VARCHAR(255) NOT NULL,
-          role VARCHAR(20) NOT NULL CHECK (role IN ('mentor', 'mentee')),
-          verified BOOLEAN DEFAULT FALSE,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
+
         
         CREATE TABLE IF NOT EXISTS notifications (
           id SERIAL PRIMARY KEY,
@@ -573,8 +554,8 @@ app.post('/api/verify-signup', async (req, res) => {
     
     // Create user in database
     const result = await pool.query(
-      'INSERT INTO users (username, email, phone, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, phone, role',
-      [username, email, phone, hashedPassword, role, true]
+      'INSERT INTO users (username, email, phone, password_hash, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, phone, role',
+      [username, email, phone, hashedPassword, role]
     );
     
     const user = result.rows[0];
