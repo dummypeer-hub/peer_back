@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import config from '../config';
+import ForgotPassword from './ForgotPassword';
 import './Auth.css';
 
 const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [step, setStep] = useState(1); // 1: email/password, 2: OTP
   const [formData, setFormData] = useState({
     email: '',
@@ -86,6 +88,16 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
       setLoading(false);
     }
   };
+
+  // Show Forgot Password component
+  if (showForgotPassword) {
+    return (
+      <ForgotPassword 
+        onBack={() => setShowForgotPassword(false)}
+        onSwitchToLogin={() => setShowForgotPassword(false)}
+      />
+    );
+  }
 
   // Step 2: OTP Verification
   if (step === 2) {
@@ -172,7 +184,7 @@ const Login = ({ onLogin, onSwitchToSignup, onForgotPassword, onBack }) => {
         </form>
         
         <div className="auth-links">
-          <button onClick={onForgotPassword} className="link-btn">
+          <button onClick={() => setShowForgotPassword(true)} className="link-btn">
             Forgot Password?
           </button>
           <button onClick={onSwitchToSignup} className="link-btn">

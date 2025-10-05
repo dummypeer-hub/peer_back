@@ -167,6 +167,27 @@ pool.connect(async (err, client, release) => {
     // Create video_calls and zoom_tokens tables
     try {
       await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(255) UNIQUE NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          phone VARCHAR(20),
+          password_hash VARCHAR(255) NOT NULL,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('mentor', 'mentee')),
+          verified BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS otp_codes (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          otp_code VARCHAR(6) NOT NULL,
+          purpose VARCHAR(20) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          is_used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
         CREATE TABLE IF NOT EXISTS video_calls (
           id SERIAL PRIMARY KEY,
           mentee_id INTEGER NOT NULL REFERENCES users(id),

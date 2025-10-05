@@ -26,6 +26,9 @@ const VideoCall = ({ callId, user, onEndCall }) => {
   const [socket, setSocket] = useState(null);
   const [sessionStartTime, setSessionStartTime] = useState(null);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
+  const [mediaPermissionDialog, setMediaPermissionDialog] = useState(null);
+  const [hasMediaPermissions, setHasMediaPermissions] = useState(false);
+  const [mediaErrors, setMediaErrors] = useState({ camera: false, microphone: false });
 
   
   const localVideoRef = useRef(null);
@@ -41,7 +44,15 @@ const VideoCall = ({ callId, user, onEndCall }) => {
     socketConnection.on('call_message', (data) => {
       // Only add message if it's not from current user (to avoid duplicates)
       if (data.userId !== user.id) {
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => {
+          // Check if message already exists to prevent duplicates
+          const exists = prev.some(msg => 
+            msg.userId === data.userId && 
+            msg.message === data.message && 
+            Math.abs(new Date(msg.timestamp).getTime() - new Date(data.timestamp).getTime()) < 1000
+          );
+          return exists ? prev : [...prev, data];
+        });
       }
     });
     
@@ -135,6 +146,48 @@ const VideoCall = ({ callId, user, onEndCall }) => {
     };
   }, [sessionStartTime, socket, callId]);
 
+  const checkMediaPermissions = async () => {
+    try {
+      // Check if permissions are already granted
+      const permissions = await Promise.all([
+        navigator.permissions.query({ name: 'camera' }),
+        navigator.permissions.query({ name: 'microphone' })
+      ]);
+      
+      const cameraGranted = permissions[0].state === 'granted';
+      const micGranted = permissions[1].state === 'granted';
+      
+      if (cameraGranted && micGranted) {
+        setHasMediaPermissions(true);
+        return true;
+      }
+      
+      // Show permission dialog
+      return new Promise((resolve) => {
+        setMediaPermissionDialog({
+          onAllow: () => {
+            setMediaPermissionDialog(null);
+            setHasMediaPermissions(true);
+            resolve(true);
+          },
+          onDeny: () => {
+            setMediaPermissionDialog(null);
+            setHasMediaPermissions(false);
+            resolve(false);
+          },
+          onSkip: () => {
+            setMediaPermissionDialog(null);
+            setHasMediaPermissions(false);
+            resolve(false);
+          }
+        });
+      });
+    } catch (error) {
+      console.log('Permission check not supported, proceeding anyway');
+      return true;
+    }
+  };
+
   const initializeCall = async () => {
     try {
       // Check if already joined
@@ -144,6 +197,9 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       }
       
       console.log('Initializing WebRTC call for user:', user.id);
+      
+      // Check media permissions first
+      const hasPermissions = await checkMediaPermissions();
       
       // Get WebRTC configuration with TURN servers
       const configResponse = await axios.get(`${config.API_BASE_URL}/webrtc/status/${user.id}`);
@@ -172,6 +228,11 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       
       setIsJoined(true);
       console.log('WebRTC session initialized');
+      
+      // Try to initialize media if permissions granted
+      if (hasPermissions) {
+        await initializeMedia();
+      }
       
       // Notify others about joining
       if (socket) {
@@ -216,6 +277,50 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       
     } catch (error) {
       console.error('Failed to initialize call:', error);
+    }
+  };
+
+  const initializeMedia = async () => {
+    // Try to get camera first
+    try {
+      const videoTrack = await AgoraRTC.createCameraVideoTrack({ 
+        encoderConfig: '720p_1',
+        optimizationMode: 'detail'
+      });
+      setLocalVideoTrack(videoTrack);
+      setIsVideoOff(false);
+      setMediaErrors(prev => ({ ...prev, camera: false }));
+      
+      if (localVideoRef.current) {
+        videoTrack.play(localVideoRef.current);
+      }
+      
+      if (client && isJoined) {
+        await client.publish([videoTrack]);
+      }
+    } catch (error) {
+      console.log('Camera initialization failed:', error);
+      setMediaErrors(prev => ({ ...prev, camera: true }));
+      setIsVideoOff(true);
+    }
+    
+    // Try to get microphone
+    try {
+      const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ 
+        echoCancellation: true, 
+        noiseSuppression: true 
+      });
+      setLocalAudioTrack(audioTrack);
+      setIsMuted(false);
+      setMediaErrors(prev => ({ ...prev, microphone: false }));
+      
+      if (client && isJoined) {
+        await client.publish([audioTrack]);
+      }
+    } catch (error) {
+      console.log('Microphone initialization failed:', error);
+      setMediaErrors(prev => ({ ...prev, microphone: true }));
+      setIsMuted(true);
     }
   };
 
@@ -320,12 +425,24 @@ const VideoCall = ({ callId, user, onEndCall }) => {
     try {
       if (isMuted) {
         // Turn mic ON - create fresh track
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ echoCancellation: true, noiseSuppression: true });
-        setLocalAudioTrack(audioTrack);
-        if (client && isJoined) {
-          await client.publish([audioTrack]);
+        try {
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ 
+            echoCancellation: true, 
+            noiseSuppression: true 
+          });
+          setLocalAudioTrack(audioTrack);
+          if (client && isJoined) {
+            await client.publish([audioTrack]);
+          }
+          setIsMuted(false);
+          setMediaErrors(prev => ({ ...prev, microphone: false }));
+        } catch (micError) {
+          console.error('Microphone access failed:', micError);
+          setMediaErrors(prev => ({ ...prev, microphone: true }));
+          setIsMuted(true);
+          // Show user-friendly message
+          alert('Microphone access denied or not available. You can still participate in the video call.');
         }
-        setIsMuted(false);
       } else {
         // Turn mic OFF - completely release microphone
         if (localAudioTrack) {
@@ -342,10 +459,8 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       }
     } catch (error) {
       console.error('Microphone toggle error:', error);
-      if (error.message.includes('NotReadableError') || error.message.includes('in use')) {
-        // Show red X indicator instead of error
-        setIsMuted(true);
-      }
+      setIsMuted(true);
+      setMediaErrors(prev => ({ ...prev, microphone: true }));
     }
   };
 
@@ -353,19 +468,31 @@ const VideoCall = ({ callId, user, onEndCall }) => {
     try {
       if (isVideoOff) {
         // Turn camera ON
-        const videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: '720p_1' });
-        setLocalVideoTrack(videoTrack);
-        
-        // Play in local video element
-        if (localVideoRef.current) {
-          videoTrack.play(localVideoRef.current);
+        try {
+          const videoTrack = await AgoraRTC.createCameraVideoTrack({ 
+            encoderConfig: '720p_1',
+            optimizationMode: 'detail'
+          });
+          setLocalVideoTrack(videoTrack);
+          
+          // Play in local video element
+          if (localVideoRef.current) {
+            videoTrack.play(localVideoRef.current);
+          }
+          
+          // Publish the new track
+          if (client && isJoined) {
+            await client.publish([videoTrack]);
+          }
+          setIsVideoOff(false);
+          setMediaErrors(prev => ({ ...prev, camera: false }));
+        } catch (camError) {
+          console.error('Camera access failed:', camError);
+          setMediaErrors(prev => ({ ...prev, camera: true }));
+          setIsVideoOff(true);
+          // Show user-friendly message
+          alert('Camera access denied or not available. You can still participate in the audio call.');
         }
-        
-        // Publish the new track
-        if (client && isJoined) {
-          await client.publish([videoTrack]);
-        }
-        setIsVideoOff(false);
       } else {
         // Turn camera OFF
         if (localVideoTrack) {
@@ -383,10 +510,8 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       }
     } catch (error) {
       console.error('Camera toggle error:', error);
-      if (error.message.includes('NotReadableError') || error.message.includes('in use')) {
-        // Show red X indicator instead of error
-        setIsVideoOff(true);
-      }
+      setIsVideoOff(true);
+      setMediaErrors(prev => ({ ...prev, camera: true }));
     }
   };
 
@@ -461,8 +586,11 @@ const VideoCall = ({ callId, user, onEndCall }) => {
         timestamp: new Date().toISOString()
       };
       
-      socket.emit('call_message', messageData);
+      // Add message to local state immediately
       setMessages(prev => [...prev, messageData]);
+      
+      // Send to others via socket (don't add to local state again)
+      socket.emit('call_message', messageData);
       setNewMessage('');
     }
   };
@@ -642,6 +770,45 @@ const VideoCall = ({ callId, user, onEndCall }) => {
 
   return (
     <div className="video-call-container">
+      {/* Media Permission Dialog */}
+      {mediaPermissionDialog && (
+        <div className="media-permission-overlay">
+          <div className="media-permission-dialog">
+            <h3>🎥 Camera & Microphone Access</h3>
+            <p>PeerVerse needs access to your camera and microphone for video calls.</p>
+            <div className="permission-options">
+              <div className="permission-option">
+                <span className="permission-icon">📹</span>
+                <span>Camera for video</span>
+                {mediaErrors.camera && <span className="error-badge">❌ Failed</span>}
+              </div>
+              <div className="permission-option">
+                <span className="permission-icon">🎤</span>
+                <span>Microphone for audio</span>
+                {mediaErrors.microphone && <span className="error-badge">❌ Failed</span>}
+              </div>
+            </div>
+            <p className="permission-note">
+              You can join the meeting without camera/microphone, but you won't be able to share video or audio.
+            </p>
+            <div className="permission-buttons">
+              <button 
+                onClick={mediaPermissionDialog.onAllow} 
+                className="permission-btn allow"
+              >
+                Allow Access
+              </button>
+              <button 
+                onClick={mediaPermissionDialog.onSkip} 
+                className="permission-btn skip"
+              >
+                Join Without Media
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="video-call-header">
         <div className="call-info">
           <h3>Video Call</h3>

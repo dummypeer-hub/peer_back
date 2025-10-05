@@ -51,12 +51,32 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
     setError('');
 
     try {
-      const response = await axios.post(`${config.API_BASE_URL}/signup`, formData);
+      const response = await axios.post(`${config.API_BASE_URL}/signup`, formData, {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       
-      setSessionId(response.data.sessionId);
-      setStep(3);
+      if (response.data.requiresEmailVerification) {
+        setSessionId(response.data.sessionId);
+        setStep(3);
+      } else {
+        // Fallback for direct signup
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        onSignup(response.data.user);
+      }
     } catch (error) {
-      setError(error.response?.data?.error || 'Signup failed');
+      let errorMessage = 'Signup failed';
+      if (error.code === 'ENOTFOUND' || error.message.includes('ERR_NAME_NOT_RESOLVED')) {
+        errorMessage = 'Network error: Cannot connect to server. Please check your internet connection.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Connection timeout. Please try again.';
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -65,18 +85,34 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
   const handleOtpVerification = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
     try {
+      if (!otp || otp.length !== 6) {
+        throw new Error('Please enter a valid 6-digit OTP.');
+      }
+      
       const response = await axios.post(`${config.API_BASE_URL}/verify-signup`, {
         sessionId,
         otp
+      }, {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       onSignup(response.data.user);
     } catch (error) {
-      setError(error.response?.data?.error || 'OTP verification failed');
+      let errorMessage = 'OTP verification failed';
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
