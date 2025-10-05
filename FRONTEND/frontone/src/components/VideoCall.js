@@ -147,45 +147,33 @@ const VideoCall = ({ callId, user, onEndCall }) => {
   }, [sessionStartTime, socket, callId]);
 
   const checkMediaPermissions = async () => {
-    try {
-      // Check if permissions are already granted
-      const permissions = await Promise.all([
-        navigator.permissions.query({ name: 'camera' }),
-        navigator.permissions.query({ name: 'microphone' })
-      ]);
-      
-      const cameraGranted = permissions[0].state === 'granted';
-      const micGranted = permissions[1].state === 'granted';
-      
-      if (cameraGranted && micGranted) {
-        setHasMediaPermissions(true);
-        return true;
-      }
-      
-      // Show permission dialog
-      return new Promise((resolve) => {
-        setMediaPermissionDialog({
-          onAllow: () => {
-            setMediaPermissionDialog(null);
+    // Always show permission dialog for better UX
+    return new Promise((resolve) => {
+      setMediaPermissionDialog({
+        onAllow: async () => {
+          setMediaPermissionDialog(null);
+          try {
+            // Test camera access
+            const videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: '720p_1' });
+            videoTrack.close();
+            // Test microphone access
+            const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            audioTrack.close();
             setHasMediaPermissions(true);
             resolve(true);
-          },
-          onDeny: () => {
-            setMediaPermissionDialog(null);
-            setHasMediaPermissions(false);
-            resolve(false);
-          },
-          onSkip: () => {
-            setMediaPermissionDialog(null);
+          } catch (error) {
+            console.log('Media access failed, but allowing to join');
             setHasMediaPermissions(false);
             resolve(false);
           }
-        });
+        },
+        onSkip: () => {
+          setMediaPermissionDialog(null);
+          setHasMediaPermissions(false);
+          resolve(false);
+        }
       });
-    } catch (error) {
-      console.log('Permission check not supported, proceeding anyway');
-      return true;
-    }
+    });
   };
 
   const initializeCall = async () => {
@@ -771,36 +759,34 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       {mediaPermissionDialog && (
         <div className="media-permission-overlay">
           <div className="media-permission-dialog">
-            <h3>🎥 Camera & Microphone Access</h3>
-            <p>PeerVerse needs access to your camera and microphone for video calls.</p>
+            <div className="permission-header">
+              <div className="permission-icon-large">🎥</div>
+              <h3>Join Meeting</h3>
+              <p>How would you like to join this video call?</p>
+            </div>
+            
             <div className="permission-options">
-              <div className="permission-option">
-                <span className="permission-icon">📹</span>
-                <span>Camera for video</span>
-                {mediaErrors.camera && <span className="error-badge">❌ Failed</span>}
+              <div className="permission-card" onClick={mediaPermissionDialog.onAllow}>
+                <div className="card-icon">📹</div>
+                <div className="card-content">
+                  <h4>Join with Camera & Mic</h4>
+                  <p>Full video call experience</p>
+                </div>
+                <div className="card-arrow">→</div>
               </div>
-              <div className="permission-option">
-                <span className="permission-icon">🎤</span>
-                <span>Microphone for audio</span>
-                {mediaErrors.microphone && <span className="error-badge">❌ Failed</span>}
+              
+              <div className="permission-card" onClick={mediaPermissionDialog.onSkip}>
+                <div className="card-icon">👁️</div>
+                <div className="card-content">
+                  <h4>Join as Viewer</h4>
+                  <p>Watch and chat only</p>
+                </div>
+                <div className="card-arrow">→</div>
               </div>
             </div>
-            <p className="permission-note">
-              You can join the meeting without camera/microphone, but you won't be able to share video or audio.
-            </p>
-            <div className="permission-buttons">
-              <button 
-                onClick={mediaPermissionDialog.onAllow} 
-                className="permission-btn allow"
-              >
-                Allow Access
-              </button>
-              <button 
-                onClick={mediaPermissionDialog.onSkip} 
-                className="permission-btn skip"
-              >
-                Join Without Media
-              </button>
+            
+            <div className="permission-note">
+              <small>💡 You can enable camera/microphone later during the call</small>
             </div>
           </div>
         </div>
@@ -938,9 +924,11 @@ const VideoCall = ({ callId, user, onEndCall }) => {
             <div className="chat-messages">
               {messages.map((msg, index) => (
                 <div key={index} className={`message ${msg.userId === user.id ? 'own' : 'other'}`}>
-                  <span className="username">{msg.username}:</span>
-                  <span className="text">{msg.message}</span>
-                  <span className="time">{new Date(msg.timestamp).toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' })}</span>
+                  <div className="message-content">
+                    <div className="username">{msg.username}</div>
+                    <div className="text">{msg.message}</div>
+                    <div className="time">{new Date(msg.timestamp).toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' })}</div>
+                  </div>
                 </div>
               ))}
             </div>

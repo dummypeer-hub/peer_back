@@ -98,50 +98,96 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         localStream.getTracks().forEach(track => track.stop());
       }
       
-      // Get user media with progressive fallback constraints
-      let stream;
-      try {
-        // Try HD first
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720 },
-          audio: { echoCancellation: true, noiseSuppression: true }
+      // Show permission dialog first
+      const userChoice = await new Promise((resolve) => {
+        const dialog = document.createElement('div');
+        dialog.className = 'media-permission-overlay';
+        dialog.innerHTML = `
+          <div class="media-permission-dialog">
+            <div class="permission-header">
+              <div class="permission-icon-large">🎥</div>
+              <h3>Join Meeting</h3>
+              <p>How would you like to join this video call?</p>
+            </div>
+            
+            <div class="permission-options">
+              <div class="permission-card" onclick="resolve(true)">
+                <div class="card-icon">📹</div>
+                <div class="card-content">
+                  <h4>Join with Camera & Mic</h4>
+                  <p>Full video call experience</p>
+                </div>
+                <div class="card-arrow">→</div>
+              </div>
+              
+              <div class="permission-card" onclick="resolve(false)">
+                <div class="card-icon">👁️</div>
+                <div class="card-content">
+                  <h4>Join as Viewer</h4>
+                  <p>Watch and chat only</p>
+                </div>
+                <div class="card-arrow">→</div>
+              </div>
+            </div>
+            
+            <div class="permission-note">
+              <small>💡 You can enable camera/microphone later during the call</small>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        
+        dialog.querySelectorAll('.permission-card').forEach((card, index) => {
+          card.onclick = () => {
+            document.body.removeChild(dialog);
+            resolve(index === 0);
+          };
         });
-        console.log('✅ HD media access successful');
-      } catch (error) {
-        console.warn('HD constraints failed, trying standard:', error.message);
+      });
+      
+      let stream;
+      if (userChoice) {
+        // User wants camera/mic
         try {
-          // Try standard quality
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480 },
-            audio: true
-          });
-          console.log('✅ Standard media access successful');
-        } catch (error2) {
-          console.warn('Standard constraints failed, trying basic:', error2.message);
-          try {
-            // Try basic constraints
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: true
-            });
-            console.log('✅ Basic media access successful');
-          } catch (error3) {
-            console.error('All video constraints failed:', error3.message);
-            // Try audio only as last resort
-            try {
-              console.log('🎤 Attempting audio-only fallback...');
-              stream = await navigator.mediaDevices.getUserMedia({
-                video: false,
-                audio: true
-              });
-              console.log('✅ Audio-only access successful');
-              alert('Camera access failed, continuing with audio only. Please check if another application is using your camera.');
-            } catch (error4) {
-              console.error('Audio access also failed:', error4.message);
-              throw new Error(`Failed to access any media devices: ${error4.message}`);
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+          
+          const constraints = isMobile ? {
+            video: {
+              width: { ideal: 640, max: 1280 },
+              height: { ideal: 480, max: 720 },
+              aspectRatio: { ideal: 4/3 },
+              frameRate: { ideal: 24, max: 30 },
+              facingMode: 'user'
+            },
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
             }
-          }
+          } : {
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              aspectRatio: { ideal: 16/9 },
+              frameRate: { ideal: 30 }
+            },
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true
+            }
+          };
+          
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log('✅ Full media access successful');
+        } catch (error) {
+          console.warn('Media access failed, joining without media:', error.message);
+          stream = new MediaStream();
         }
+      } else {
+        // User chose viewer mode
+        stream = new MediaStream();
+        console.log('✅ Joining as viewer (no media)');
       }
       
       setLocalStream(stream);
@@ -762,14 +808,13 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           <video ref={remoteVideoRef} autoPlay playsInline />
           {!remoteStream && (
             <div className="waiting-message">
-              <div>Waiting for other participant...</div>
+              <div className="waiting-icon">👥</div>
+              <div className="waiting-text">Waiting for other participant...</div>
               <div className="connection-status">
-                Status: {connectionState}
-              </div>
-              <div className="debug-info" style={{ fontSize: '12px', marginTop: '10px', opacity: 0.7 }}>
-                Role: {user.role} | Call: {callId}
-                {user.role === 'mentee' && <div>Waiting for mentor's offer...</div>}
-                {user.role === 'mentor' && <div>Offer sent, waiting for answer...</div>}
+                <span className={`status-indicator ${connectionState}`}></span>
+                {connectionState === 'connecting' ? 'Connecting...' : 
+                 connectionState === 'connected' ? 'Connected' :
+                 connectionState === 'failed' ? 'Connection Failed' : 'Waiting...'}
               </div>
             </div>
           )}
