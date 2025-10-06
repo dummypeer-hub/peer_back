@@ -135,15 +135,54 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
+// CORS configuration for Railway deployment
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'https://peerverse-final.vercel.app',
+    'https://peerverse.in',
+    'https://www.peerverse.in',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
+  next();
+});
+
+// Fallback CORS for any missed cases
 app.use(cors({
-  origin: ['https://peerverse-final.vercel.app', 'https://peerverse.in', 'https://www.peerverse.in', 'http://localhost:3000', 'http://localhost:3001'],
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://peerverse-final.vercel.app',
+      'https://peerverse.in', 
+      'https://www.peerverse.in',
+      'http://localhost:3000',
+      'http://localhost:3001'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
-
-// Handle preflight requests
-app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use('/api/signup', limiter);
 app.use('/api/login', limiter);
@@ -240,10 +279,20 @@ const sendOTPEmail = async (email, otp, purpose, retryCount = 0) => {
   }
 };
 
-// Test endpoint
+// Test endpoint with CORS headers
 app.get('/api/test', (req, res) => {
   res.json({ 
-    message: 'PeerSync Backend is running on Vercel!',
+    message: 'PeerSync Backend is running on Railway!',
+    timestamp: new Date().toISOString(),
+    cors: 'enabled'
+  });
+});
+
+// CORS test endpoint
+app.get('/api/cors-test', (req, res) => {
+  res.json({
+    message: 'CORS test successful',
+    origin: req.headers.origin,
     timestamp: new Date().toISOString()
   });
 });
