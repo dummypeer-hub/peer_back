@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-import config from '../config';
+import config, { createApiRequest } from '../config';
 import './FeedbackModal.css';
 
 const FeedbackModal = ({ isOpen, onClose, sessionData, user }) => {
@@ -17,16 +16,23 @@ const FeedbackModal = ({ isOpen, onClose, sessionData, user }) => {
 
     setIsSubmitting(true);
     try {
-      await axios.post(`${config.API_BASE_URL}/session-feedback`, {
-        sessionId: sessionData.sessionId,
-        menteeId: user.role === 'mentee' ? user.id : sessionData.menteeId,
-        mentorId: user.role === 'mentor' ? user.id : sessionData.mentorId,
-        rating,
-        feedback
+      const response = await createApiRequest(`${config.API_BASE_URL}/session-feedback`, {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId: sessionData.sessionId,
+          menteeId: user.role === 'mentee' ? user.id : sessionData.menteeId,
+          mentorId: user.role === 'mentor' ? user.id : sessionData.mentorId,
+          rating,
+          feedback
+        })
       });
 
-      alert('Thank you for your feedback!');
-      onClose();
+      if (response.ok) {
+        alert('Thank you for your feedback!');
+        onClose();
+      } else {
+        throw new Error('Failed to submit feedback');
+      }
     } catch (error) {
       console.error('Error submitting feedback:', error);
       alert('Failed to submit feedback. Please try again.');

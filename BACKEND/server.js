@@ -243,9 +243,10 @@ pool.connect(async (err, client, release) => {
           mentor_id INTEGER NOT NULL REFERENCES users(id),
           rating INTEGER CHECK (rating >= 1 AND rating <= 5),
           feedback TEXT,
-          created_at TIMESTAMP DEFAULT NOW(),
-          UNIQUE(session_id, mentee_id)
+          created_at TIMESTAMP DEFAULT NOW()
         );
+        
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_session_feedback_unique ON session_feedback(session_id, mentee_id);
         
         CREATE TABLE IF NOT EXISTS mentor_feedback (
           id SERIAL PRIMARY KEY,
@@ -702,7 +703,7 @@ app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
   }
 });
 
-// Get popular blogs (most views and likes)
+// Get popular blogs (most likes first, then views)
 app.get('/api/blogs/popular', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -718,7 +719,7 @@ app.get('/api/blogs/popular', async (req, res) => {
       WHERE b.is_published = true
       GROUP BY b.id, b.title, b.description, b.content, b.category, b.tags, b.images,
                b.likes_count, b.comments_count, b.created_at, b.mentor_id, mp.name, u.username, mp.profile_picture
-      ORDER BY (b.likes_count * 2 + COUNT(bv.id)) DESC
+      ORDER BY b.likes_count DESC, COUNT(bv.id) DESC, b.created_at DESC
       LIMIT 9
     `);
     

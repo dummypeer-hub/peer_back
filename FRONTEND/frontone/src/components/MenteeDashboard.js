@@ -294,6 +294,13 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     }
   }, [user]);
   
+  // Refresh popular blogs when returning to home section
+  useEffect(() => {
+    if (currentSection === 'home' && user?.id) {
+      loadPopularBlogs();
+    }
+  }, [currentSection, user?.id]);
+  
   const loadRecommendedMentors = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -907,8 +914,8 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           {popularBlogs.length > 0 && (
             <div className="popular-blogs-section">
               <div className="section-header">
-                <h2>🔥 Trending Blogs</h2>
-                <p>Most viewed and liked content</p>
+                <h2>🔥 Most Liked Blogs</h2>
+                <p>Top 9 blogs with highest likes from our community</p>
               </div>
               <div className="blogs-grid">
                 {popularBlogs.map(blog => (
@@ -916,8 +923,8 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                     <div className="blog-header">
                       <h3>{blog.title}</h3>
                       <div className="blog-stats">
+                        <span className="likes-stat">❤️ {blog.likes_count}</span>
                         <span>👁️ {blog.view_count}</span>
-                        <span>❤️ {blog.likes_count}</span>
                         <span>💬 {blog.comments_count}</span>
                       </div>
                     </div>

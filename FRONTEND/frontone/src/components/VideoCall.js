@@ -39,7 +39,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    const socketConnection = io('https://peerversefinal-production.up.railway.app');
+    const socketConnection = io(config.SOCKET_URL);
     setSocket(socketConnection);
     
     socketConnection.emit('join_call', callId);
@@ -216,6 +216,11 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       
       setIsJoined(true);
       console.log('WebRTC session initialized - joining call regardless of media permissions');
+      
+      // Set up client event listeners before joining
+      client.on('user-published', handleUserPublished);
+      client.on('user-unpublished', handleUserUnpublished);
+      client.on('user-left', handleUserLeft);
       
       // Initialize media if permissions granted
       if (hasPermissions) {
@@ -421,6 +426,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
           setLocalAudioTrack(audioTrack);
           if (client && isJoined) {
             await client.publish([audioTrack]);
+            console.log('Audio track published to other participants');
           }
           setIsMuted(false);
           setMediaErrors(prev => ({ ...prev, microphone: false }));
@@ -428,19 +434,17 @@ const VideoCall = ({ callId, user, onEndCall }) => {
           console.error('Microphone access failed:', micError);
           setMediaErrors(prev => ({ ...prev, microphone: true }));
           setIsMuted(true);
-          // Show user-friendly message
           alert('Microphone access denied or not available. You can still participate in the video call.');
         }
       } else {
         // Turn mic OFF - completely release microphone
         if (localAudioTrack) {
-          localAudioTrack.stop();
-          localAudioTrack.close();
-          
           if (client && isJoined) {
             await client.unpublish([localAudioTrack]);
+            console.log('Audio track unpublished from other participants');
           }
-          
+          localAudioTrack.stop();
+          localAudioTrack.close();
           setLocalAudioTrack(null);
         }
         setIsMuted(true);
@@ -468,9 +472,10 @@ const VideoCall = ({ callId, user, onEndCall }) => {
             videoTrack.play(localVideoRef.current);
           }
           
-          // Publish the new track
+          // Publish the new track to other participants
           if (client && isJoined) {
             await client.publish([videoTrack]);
+            console.log('Video track published to other participants');
           }
           setIsVideoOff(false);
           setMediaErrors(prev => ({ ...prev, camera: false }));
@@ -478,20 +483,17 @@ const VideoCall = ({ callId, user, onEndCall }) => {
           console.error('Camera access failed:', camError);
           setMediaErrors(prev => ({ ...prev, camera: true }));
           setIsVideoOff(true);
-          // Show user-friendly message
           alert('Camera access denied or not available. You can still participate in the audio call.');
         }
       } else {
         // Turn camera OFF
         if (localVideoTrack) {
-          await localVideoTrack.setEnabled(false);
-          localVideoTrack.stop();
-          localVideoTrack.close();
-          
           if (client && isJoined) {
             await client.unpublish([localVideoTrack]);
+            console.log('Video track unpublished from other participants');
           }
-          
+          localVideoTrack.stop();
+          localVideoTrack.close();
           setLocalVideoTrack(null);
         }
         setIsVideoOff(true);

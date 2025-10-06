@@ -1112,6 +1112,15 @@
   color: #666;
 }
 
+.likes-stat {
+  background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 11px;
+}
+
 .blog-description {
   color: #666;
   font-size: 14px;

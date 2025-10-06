@@ -17,11 +17,98 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// Initialize database tables
+pool.connect(async (err, client, release) => {
+  if (err) {
+    console.error('Database connection error:', err.stack);
+  } else {
+    console.log('Database connected successfully');
+    
+    // Create necessary tables for feedback system
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(255) UNIQUE NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          phone VARCHAR(20),
+          password_hash VARCHAR(255) NOT NULL,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('mentor', 'mentee')),
+          verified BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS otp_codes (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          otp_code VARCHAR(6) NOT NULL,
+          purpose VARCHAR(20) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          is_used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS video_calls (
+          id SERIAL PRIMARY KEY,
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          channel_name VARCHAR(255),
+          webrtc_session_id VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT NOW(),
+          accepted_at TIMESTAMP,
+          started_at TIMESTAMP,
+          ended_at TIMESTAMP,
+          duration_minutes INTEGER,
+          CONSTRAINT valid_status CHECK (status IN ('pending', 'accepted', 'rejected', 'active', 'completed', 'cancelled'))
+        );
+        
+        CREATE TABLE IF NOT EXISTS session_feedback (
+          id SERIAL PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES video_calls(id),
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+          feedback TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_session_feedback_unique ON session_feedback(session_id, mentee_id);
+        
+        CREATE TABLE IF NOT EXISTS mentor_ratings (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          total_rating DECIMAL(3,2) DEFAULT 0,
+          rating_count INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mentor_ratings_unique ON mentor_ratings(mentor_id);
+      `);
+      console.log('Feedback tables created/verified successfully');
+    } catch (tableError) {
+      console.error('Error creating feedback tables:', tableError);
+    }
+    
+    release();
+  }
+});
+
 // Mailjet configuration
 const mailjet = require('node-mailjet').apiConnect(
   process.env.MAILJET_API_KEY,
   process.env.MAILJET_SECRET_KEY
 );
+
+// Clear cache function
+const clearCachePattern = (pattern) => {
+  for (const key of cache.keys()) {
+    if (key.includes(pattern)) {
+      cache.delete(key);
+    }
+  }
+};
 
 // In-memory cache for sessions
 const cache = new Map();
@@ -540,6 +627,78 @@ app.post('/api/video-call/:callId/start', (req, res) => {
 
 app.post('/api/video-call/:callId/end', (req, res) => {
   res.json({ message: 'Call ended' });
+});
+
+// Submit session feedback and update mentor rating
+app.post('/api/session-feedback', async (req, res) => {
+  try {
+    const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
+    
+    if (!sessionId || !menteeId || !rating) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Get mentor ID from session if not provided
+    let finalMentorId = mentorId;
+    if (!finalMentorId) {
+      const sessionResult = await pool.query(
+        'SELECT mentor_id FROM video_calls WHERE id = $1',
+        [sessionId]
+      );
+      if (sessionResult.rows.length > 0) {
+        finalMentorId = sessionResult.rows[0].mentor_id;
+      } else {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+    }
+    
+    // Check if feedback already exists
+    const existingFeedback = await pool.query(
+      'SELECT id FROM session_feedback WHERE session_id = $1 AND mentee_id = $2',
+      [sessionId, menteeId]
+    );
+    
+    if (existingFeedback.rows.length > 0) {
+      // Update existing feedback
+      await pool.query(
+        'UPDATE session_feedback SET rating = $1, feedback = $2, created_at = NOW() WHERE session_id = $3 AND mentee_id = $4',
+        [rating, feedback || '', sessionId, menteeId]
+      );
+    } else {
+      // Insert new feedback
+      await pool.query(
+        'INSERT INTO session_feedback (session_id, mentee_id, mentor_id, rating, feedback) VALUES ($1, $2, $3, $4, $5)',
+        [sessionId, menteeId, finalMentorId, rating, feedback || '']
+      );
+      
+      // Update mentor rating only for new feedback
+      const existingRating = await pool.query(
+        'SELECT total_rating, rating_count FROM mentor_ratings WHERE mentor_id = $1',
+        [finalMentorId]
+      );
+      
+      if (existingRating.rows.length > 0) {
+        const current = existingRating.rows[0];
+        const newCount = current.rating_count + 1;
+        const newTotal = ((current.total_rating * current.rating_count) + rating) / newCount;
+        
+        await pool.query(
+          'UPDATE mentor_ratings SET total_rating = $1, rating_count = $2, updated_at = NOW() WHERE mentor_id = $3',
+          [newTotal, newCount, finalMentorId]
+        );
+      } else {
+        await pool.query(
+          'INSERT INTO mentor_ratings (mentor_id, total_rating, rating_count) VALUES ($1, $2, $3)',
+          [finalMentorId, rating, 1]
+        );
+      }
+    }
+    
+    res.json({ message: 'Feedback submitted successfully' });
+  } catch (error) {
+    console.error('Submit feedback error:', error);
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
 });
 
 // Catch all
