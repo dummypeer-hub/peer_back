@@ -914,8 +914,8 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           {popularBlogs.length > 0 && (
             <div className="popular-blogs-section">
               <div className="section-header">
-                <h2>🔥 Most Liked Blogs</h2>
-                <p>Top 9 blogs with highest likes from our community</p>
+                <h2>📝 Latest Blogs</h2>
+                <p>Top 9 latest blogs from our mentors</p>
               </div>
               <div className="blogs-grid">
                 {popularBlogs.map(blog => (

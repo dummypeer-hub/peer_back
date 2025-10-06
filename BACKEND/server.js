@@ -703,7 +703,7 @@ app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
   }
 });
 
-// Get popular blogs (most likes first, then views)
+// Get latest blogs (most recent first)
 app.get('/api/blogs/popular', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -719,7 +719,7 @@ app.get('/api/blogs/popular', async (req, res) => {
       WHERE b.is_published = true
       GROUP BY b.id, b.title, b.description, b.content, b.category, b.tags, b.images,
                b.likes_count, b.comments_count, b.created_at, b.mentor_id, mp.name, u.username, mp.profile_picture
-      ORDER BY b.likes_count DESC, COUNT(bv.id) DESC, b.created_at DESC
+      ORDER BY b.created_at DESC
       LIMIT 9
     `);
     
@@ -780,6 +780,27 @@ const limiter = rateLimit({
   max: 1000, // Increased limit for development
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+// CORS must be first - explicit configuration
+app.use((req, res, next) => {
+  const allowedOrigins = ['https://peerverse-final.vercel.app', 'https://peerverse.in', 'https://www.peerverse.in', 'http://localhost:3000', 'http://localhost:3001'];
+  const origin = req.headers.origin;
+  
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
+  next();
 });
 
 app.use(cors({
