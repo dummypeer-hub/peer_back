@@ -782,53 +782,23 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// CORS configuration for Railway deployment
+// Railway CORS fix - must be before other middleware
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    'https://peerverse-final.vercel.app',
-    'https://peerverse.in',
-    'https://www.peerverse.in',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ];
-  
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Max-Age', '86400');
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization');
   
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    res.sendStatus(200);
+  } else {
+    next();
   }
-  
-  next();
 });
 
-// Fallback CORS for any missed cases
 app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'https://peerverse-final.vercel.app',
-      'https://peerverse.in', 
-      'https://www.peerverse.in',
-      'http://localhost:3000',
-      'http://localhost:3001'
-    ];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  origin: 'https://www.peerverse.in',
+  credentials: true
 }));
 
 // Handle preflight requests
