@@ -137,8 +137,13 @@ const limiter = rateLimit({
 
 app.use(cors({
   origin: ['https://peerverse-final.vercel.app', 'https://peerverse.in', 'https://www.peerverse.in', 'http://localhost:3000', 'http://localhost:3001'],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use('/api/signup', limiter);
 app.use('/api/login', limiter);
@@ -627,6 +632,119 @@ app.post('/api/video-call/:callId/start', (req, res) => {
 
 app.post('/api/video-call/:callId/end', (req, res) => {
   res.json({ message: 'Call ended' });
+});
+
+// Get mentor feedback
+app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    const result = await pool.query(`
+      SELECT sf.rating, sf.feedback, sf.created_at, sf.session_id,
+             u.username as mentee_name
+      FROM session_feedback sf
+      JOIN users u ON sf.mentee_id = u.id
+      WHERE sf.mentor_id = $1
+      ORDER BY sf.created_at DESC
+      LIMIT 50
+    `, [mentorId]);
+    
+    const ratingResult = await pool.query(
+      'SELECT total_rating, rating_count FROM mentor_ratings WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    const overallRating = ratingResult.rows.length > 0 ? {
+      rating: parseFloat(ratingResult.rows[0].total_rating) || 0,
+      count: parseInt(ratingResult.rows[0].rating_count) || 0
+    } : { rating: 0, count: 0 };
+    
+    res.json({ 
+      feedback: result.rows,
+      overallRating
+    });
+  } catch (error) {
+    console.error('Get mentor feedback error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get mentor profile
+app.get('/api/mentor/profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await pool.query(
+      'SELECT name, profile_picture, bio FROM mentor_profiles WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.json({ profile: null });
+    }
+    
+    const profile = {
+      basicInfo: {
+        name: result.rows[0].name || '',
+        profilePicture: result.rows[0].profile_picture || '',
+        bio: result.rows[0].bio || ''
+      }
+    };
+    
+    res.json({ profile });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get mentor stats
+app.get('/api/mentor/stats/:mentorId', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    const sessionsResult = await pool.query('SELECT COUNT(*) as total FROM video_calls WHERE mentor_id = $1', [mentorId]);
+    const sessions = sessionsResult.rows[0];
+    
+    res.json({
+      totalSessions: parseInt(sessions.total) || 0,
+      completedSessions: 0,
+      pendingSessions: 0,
+      totalBlogs: 0,
+      walletBalance: 0,
+      profileCompletion: 50
+    });
+  } catch (error) {
+    console.error('Get mentor stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get notifications
+app.get('/api/notifications/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    res.json({ notifications: [] });
+  } catch (error) {
+    console.error('Get notifications error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get video calls
+app.get('/api/video-calls/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await pool.query(`
+      SELECT vc.id, vc.status, vc.created_at, vc.accepted_at, vc.started_at, vc.ended_at, vc.channel_name
+      FROM video_calls vc
+      WHERE vc.mentee_id = $1 OR vc.mentor_id = $1
+      ORDER BY vc.created_at DESC
+      LIMIT 15
+    `, [userId]);
+    
+    res.json({ calls: result.rows });
+  } catch (error) {
+    console.error('Get user calls error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Submit session feedback and update mentor rating
