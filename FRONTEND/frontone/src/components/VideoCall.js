@@ -39,7 +39,7 @@ const VideoCall = ({ callId, user, onEndCall }) => {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    const socketConnection = io(config.SOCKET_URL);
+    const socketConnection = io('https://peerversefinal-production.up.railway.app');
     setSocket(socketConnection);
     
     socketConnection.emit('join_call', callId);
