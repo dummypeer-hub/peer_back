@@ -522,8 +522,23 @@ app.get('/api/mentee/:menteeId/favorite-mentors', async (req, res) => {
   }
 });
 
+// Handle preflight OPTIONS request for session-feedback
+app.options('/api/session-feedback', (req, res) => {
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.sendStatus(200);
+});
+
 // Submit session feedback and update mentor rating
 app.post('/api/session-feedback', async (req, res) => {
+  // Add CORS headers specifically for this endpoint
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
   try {
     const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
     
@@ -784,12 +799,34 @@ const limiter = rateLimit({
 
 // Railway CORS fix - must be before other middleware
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  const allowedOrigins = [
+    'https://www.peerverse.in',
+    'https://peerverse.in',
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ];
+  
+  const origin = req.headers.origin;
+  console.log(`CORS Request: ${req.method} ${req.path} from origin: ${origin}`);
+  
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    console.log(`CORS: Allowed origin ${origin}`);
+  } else {
+    console.log(`CORS: Origin ${origin} not in allowed list:`, allowedOrigins);
+    // Still allow requests without origin (like from Postman)
+    if (!origin) {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+  }
+  
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization,Cache-Control');
   
   if (req.method === 'OPTIONS') {
+    console.log(`CORS: Handling OPTIONS preflight for ${req.path}`);
     res.sendStatus(200);
   } else {
     next();
@@ -797,7 +834,20 @@ app.use((req, res, next) => {
 });
 
 app.use(cors({
-  origin: 'https://www.peerverse.in',
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://www.peerverse.in',
+      'https://peerverse.in', 
+      'https://peerverse-final.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:3001'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
