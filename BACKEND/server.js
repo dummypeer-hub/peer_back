@@ -526,39 +526,67 @@ app.post('/api/session-feedback', async (req, res) => {
   try {
     const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
     
-    if (!sessionId || !menteeId || !mentorId || !rating) {
+    if (!sessionId || !menteeId || !rating) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Insert feedback with ON CONFLICT handling
-    await pool.query(
-      'INSERT INTO session_feedback (session_id, mentee_id, mentor_id, rating, feedback) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (session_id, mentee_id) DO UPDATE SET rating = $4, feedback = $5, created_at = NOW()',
-      [sessionId, menteeId, mentorId, rating, feedback || '']
-    );
-    
-    // Update mentor rating
-    const existingRating = await pool.query(
-      'SELECT total_rating, rating_count FROM mentor_ratings WHERE mentor_id = $1',
-      [mentorId]
-    );
-    
-    if (existingRating.rows.length > 0) {
-      const current = existingRating.rows[0];
-      const newCount = current.rating_count + 1;
-      const newTotal = ((current.total_rating * current.rating_count) + rating) / newCount;
-      
-      await pool.query(
-        'UPDATE mentor_ratings SET total_rating = $1, rating_count = $2, updated_at = NOW() WHERE mentor_id = $3',
-        [newTotal, newCount, mentorId]
+    // Get mentor ID from session if not provided
+    let finalMentorId = mentorId;
+    if (!finalMentorId) {
+      const sessionResult = await pool.query(
+        'SELECT mentor_id FROM video_calls WHERE id = $1',
+        [sessionId]
       );
-    } else {
-      await pool.query(
-        'INSERT INTO mentor_ratings (mentor_id, total_rating, rating_count) VALUES ($1, $2, $3)',
-        [mentorId, rating, 1]
-      );
+      if (sessionResult.rows.length > 0) {
+        finalMentorId = sessionResult.rows[0].mentor_id;
+      } else {
+        return res.status(404).json({ error: 'Session not found' });
+      }
     }
     
-    clearCachePattern(`mentor_${mentorId}`);
+    // Check if feedback already exists
+    const existingFeedback = await pool.query(
+      'SELECT id FROM session_feedback WHERE session_id = $1 AND mentee_id = $2',
+      [sessionId, menteeId]
+    );
+    
+    if (existingFeedback.rows.length > 0) {
+      // Update existing feedback
+      await pool.query(
+        'UPDATE session_feedback SET rating = $1, feedback = $2, created_at = NOW() WHERE session_id = $3 AND mentee_id = $4',
+        [rating, feedback || '', sessionId, menteeId]
+      );
+    } else {
+      // Insert new feedback
+      await pool.query(
+        'INSERT INTO session_feedback (session_id, mentee_id, mentor_id, rating, feedback) VALUES ($1, $2, $3, $4, $5)',
+        [sessionId, menteeId, finalMentorId, rating, feedback || '']
+      );
+      
+      // Update mentor rating only for new feedback
+      const existingRating = await pool.query(
+        'SELECT total_rating, rating_count FROM mentor_ratings WHERE mentor_id = $1',
+        [finalMentorId]
+      );
+      
+      if (existingRating.rows.length > 0) {
+        const current = existingRating.rows[0];
+        const newCount = current.rating_count + 1;
+        const newTotal = ((current.total_rating * current.rating_count) + rating) / newCount;
+        
+        await pool.query(
+          'UPDATE mentor_ratings SET total_rating = $1, rating_count = $2, updated_at = NOW() WHERE mentor_id = $3',
+          [newTotal, newCount, finalMentorId]
+        );
+      } else {
+        await pool.query(
+          'INSERT INTO mentor_ratings (mentor_id, total_rating, rating_count) VALUES ($1, $2, $3)',
+          [finalMentorId, rating, 1]
+        );
+      }
+    }
+    
+    clearCachePattern(`mentor_${finalMentorId}`);
     clearCachePattern('mentors_list');
     
     res.json({ message: 'Feedback submitted successfully' });

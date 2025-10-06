@@ -4,8 +4,13 @@ Allow: /
 # Sitemap
 Sitemap: https://peerverse.in/sitemap.xml
 
-# Disallow private areas
-Disallow: /api/
+# Crawl-delay
+Crawl-delay: 1
+
+# Disallow admin and private areas
 Disallow: /admin/
-Disallow: /video-call/
-Disallow: /dashboard/private/
+Disallow: /api/
+Disallow: /private/
+Disallow: /*.json$
+Disallow: /*.xml$
+Allow: /sitemap.xml

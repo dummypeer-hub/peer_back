@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../config';
 import io from 'socket.io-client';
+import FeedbackModal from './FeedbackModal';
 import './SessionsPanel.css';
 
 const SessionsPanel = ({ user, onJoinSession }) => {
   const [sessions, setSessions] = useState([]);
   const [socket, setSocket] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackData, setFeedbackData] = useState(null);
 
   useEffect(() => {
     console.log('SessionsPanel connecting to socket:', config.SOCKET_URL);
@@ -366,7 +369,25 @@ const SessionsPanel = ({ user, onJoinSession }) => {
                 )}
                 
                 {session.status === 'completed' && (
-                  <span className="meeting-completed">✅ Meeting Completed</span>
+                  <div className="completed-actions">
+                    <span className="meeting-completed">✅ Meeting Completed</span>
+                    {user.role === 'mentee' && (
+                      <button 
+                        onClick={() => {
+                          setFeedbackData({
+                            sessionId: session.id,
+                            mentorId: null,
+                            menteeId: user.id
+                          });
+                          setShowFeedbackModal(true);
+                        }}
+                        className="feedback-btn"
+                        title="Leave Feedback"
+                      >
+                        ⭐ Feedback
+                      </button>
+                    )}
+                  </div>
                 )}
                 
                 {session.status === 'active' && session.started_at && !session.ended_at && (
@@ -412,6 +433,17 @@ const SessionsPanel = ({ user, onJoinSession }) => {
           ))
         )}
       </div>
+      
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => {
+          setShowFeedbackModal(false);
+          loadSessions(); // Refresh sessions after feedback
+        }}
+        sessionData={feedbackData}
+        user={user}
+      />
     </div>
   );
 };

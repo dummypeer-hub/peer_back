@@ -234,6 +234,13 @@
   font-style: italic;
 }
 
+.completed-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
 .meeting-completed {
   color: #4CAF50;
   font-weight: 600;
@@ -241,6 +248,26 @@
   background: rgba(76, 175, 80, 0.1);
   border-radius: 20px;
   border: 1px solid #4CAF50;
+}
+
+.feedback-btn {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 15px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.feedback-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.4);
 }
 
 .session-status {
@@ -279,5 +306,16 @@
   .session-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+  
+  .completed-actions {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .feedback-btn {
+    font-size: 11px;
+    padding: 5px 10px;
   }
 }

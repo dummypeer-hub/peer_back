@@ -3,6 +3,7 @@ import AgoraRTC from 'agora-rtc-sdk-ng';
 import config from '../config';
 import axios from 'axios';
 import io from 'socket.io-client';
+import FeedbackModal from './FeedbackModal';
 import './VideoCall.css';
 
 const VideoCall = ({ callId, user, onEndCall }) => {
@@ -29,6 +30,8 @@ const VideoCall = ({ callId, user, onEndCall }) => {
   const [mediaPermissionDialog, setMediaPermissionDialog] = useState(null);
   const [hasMediaPermissions, setHasMediaPermissions] = useState(false);
   const [mediaErrors, setMediaErrors] = useState({ camera: false, microphone: false });
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackData, setFeedbackData] = useState(null);
 
   
   const localVideoRef = useRef(null);
@@ -590,12 +593,26 @@ const VideoCall = ({ callId, user, onEndCall }) => {
       await axios.post(`${config.API_BASE_URL}/video-call/${callId}/end`, {
         userId: user.id
       });
+      
+      // Show feedback modal for mentees after ending call
+      if (user.role === 'mentee') {
+        setFeedbackData({
+          sessionId: callId,
+          mentorId: null, // Will be filled from call data if needed
+          menteeId: user.id
+        });
+        setShowFeedbackModal(true);
+      }
     } catch (error) {
       console.error('Error ending call:', error);
     }
     
     cleanup();
-    onEndCall();
+    
+    // Only call onEndCall if feedback modal is not shown
+    if (user.role !== 'mentee') {
+      onEndCall();
+    }
   };
   
   const handleAutoEndCall = async () => {
@@ -609,6 +626,17 @@ const VideoCall = ({ callId, user, onEndCall }) => {
         userId: user.id,
         reason: 'time_limit'
       });
+      
+      // Show feedback modal for mentees after auto-ending call
+      if (user.role === 'mentee') {
+        setFeedbackData({
+          sessionId: callId,
+          mentorId: null,
+          menteeId: user.id
+        });
+        setShowFeedbackModal(true);
+        return; // Don't close window immediately
+      }
     } catch (error) {
       console.error('Error auto-ending call:', error);
     }
@@ -1025,6 +1053,17 @@ const VideoCall = ({ callId, user, onEndCall }) => {
           📞 End Call
         </button>
       </div>
+      
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => {
+          setShowFeedbackModal(false);
+          onEndCall(); // Call onEndCall after feedback is closed
+        }}
+        sessionData={feedbackData}
+        user={user}
+      />
     </div>
   );
 };
