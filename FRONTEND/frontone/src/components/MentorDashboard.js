@@ -34,6 +34,10 @@ const MentorDashboard = ({ user, onLogout }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [feedback, setFeedback] = useState([]);
   const [overallRating, setOverallRating] = useState({ rating: 0, count: 0 });
+  const [upiDetails, setUpiDetails] = useState({ upi_id: '', holder_name: '' });
+  const [showUpiForm, setShowUpiForm] = useState(false);
+  const [upiLoading, setUpiLoading] = useState(false);
+  const [upiMessage, setUpiMessage] = useState('');
   
   // All function definitions before useEffect
   const handleJoinSession = (callId) => {
@@ -102,6 +106,67 @@ const MentorDashboard = ({ user, onLogout }) => {
       console.error('Failed to load feedback:', error);
     }
   };
+
+  const loadUpiDetails = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${config.API_BASE_URL}/mentor/${user.id}/upi`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.upiDetails) {
+        setUpiDetails(response.data.upiDetails);
+      }
+    } catch (error) {
+      console.error('Failed to load UPI details:', error);
+    }
+  };
+
+  const saveUpiDetails = async () => {
+    if (!upiDetails.upi_id.trim()) {
+      setUpiMessage('UPI ID is required');
+      return;
+    }
+    
+    const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+    if (!upiRegex.test(upiDetails.upi_id.trim())) {
+      setUpiMessage('Please enter a valid UPI ID (e.g., yourname@paytm)');
+      return;
+    }
+    
+    setUpiLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${config.API_BASE_URL}/mentor/${user.id}/upi`, upiDetails, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUpiMessage('UPI details saved successfully!');
+      setShowUpiForm(false);
+      setTimeout(() => setUpiMessage(''), 3000);
+    } catch (error) {
+      const errorMessage = error.response?.data?.error || 'Failed to save UPI details';
+      setUpiMessage(errorMessage);
+      console.error('Save UPI error:', error);
+    } finally {
+      setUpiLoading(false);
+    }
+  };
+
+  const deleteUpiDetails = async () => {
+    if (window.confirm('Are you sure you want to delete your UPI details?')) {
+      try {
+        const token = localStorage.getItem('token');
+        await axios.delete(`${config.API_BASE_URL}/mentor/${user.id}/upi`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUpiDetails({ upi_id: '', holder_name: '' });
+        setUpiMessage('UPI details deleted successfully!');
+        setTimeout(() => setUpiMessage(''), 3000);
+      } catch (error) {
+        setUpiMessage('Failed to delete UPI details');
+        console.error('Delete UPI error:', error);
+      }
+    }
+  };
   
   const loadProfileData = async () => {
     try {
@@ -136,6 +201,7 @@ const MentorDashboard = ({ user, onLogout }) => {
       loadStats();
       loadUpcomingSessions();
       loadFeedback();
+      loadUpiDetails();
       
       const interval = setInterval(() => {
         loadNotifications();
@@ -275,171 +341,100 @@ const MentorDashboard = ({ user, onLogout }) => {
     </div>
   );
 
-  const renderWallet = () => {
-    const [upiDetails, setUpiDetails] = useState({ upi_id: '', holder_name: '' });
-    const [showUpiForm, setShowUpiForm] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState('');
-
-    const loadUpiDetails = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`${config.API_BASE_URL}/mentor/${user.id}/upi`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (response.data.upiDetails) {
-          setUpiDetails(response.data.upiDetails);
-        }
-      } catch (error) {
-        console.error('Failed to load UPI details:', error);
-      }
-    };
-
-    const saveUpiDetails = async () => {
-      if (!upiDetails.upi_id.trim()) {
-        setMessage('UPI ID is required');
-        return;
-      }
+  const renderWallet = () => (
+    <div className="wallet-content">
+      <div className="wallet-balance">
+        <h3>Current Wallet Balance: ₹{stats.walletBalance}</h3>
+      </div>
       
-      // Basic UPI ID validation
-      const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
-      if (!upiRegex.test(upiDetails.upi_id.trim())) {
-        setMessage('Please enter a valid UPI ID (e.g., yourname@paytm)');
-        return;
-      }
-      
-      setLoading(true);
-      try {
-        const token = localStorage.getItem('token');
-        await axios.post(`${config.API_BASE_URL}/mentor/${user.id}/upi`, upiDetails, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setMessage('UPI details saved successfully!');
-        setShowUpiForm(false);
-        setTimeout(() => setMessage(''), 3000);
-      } catch (error) {
-        const errorMessage = error.response?.data?.error || 'Failed to save UPI details';
-        setMessage(errorMessage);
-        console.error('Save UPI error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    React.useEffect(() => {
-      loadUpiDetails();
-    }, []);
-
-    return (
-      <div className="wallet-content">
-        <div className="wallet-balance">
-          <h3>Current Wallet Balance: ₹{stats.walletBalance}</h3>
+      <div className="upi-section">
+        <div className="upi-header">
+          <h4>UPI Payment Details</h4>
+          <button 
+            className="edit-upi-btn"
+            onClick={() => setShowUpiForm(!showUpiForm)}
+          >
+            {upiDetails.upi_id ? '✏️ Edit UPI' : '➕ Add UPI'}
+          </button>
         </div>
         
-        <div className="upi-section">
-          <div className="upi-header">
-            <h4>UPI Payment Details</h4>
-            <button 
-              className="edit-upi-btn"
-              onClick={() => setShowUpiForm(!showUpiForm)}
-            >
-              {upiDetails.upi_id ? '✏️ Edit UPI' : '➕ Add UPI'}
-            </button>
-          </div>
-          
-          {upiDetails.upi_id && !showUpiForm && (
-            <div className="upi-display">
+        {upiDetails.upi_id && !showUpiForm && (
+          <div className="upi-display">
+            <div className="upi-item">
+              <span className="upi-label">UPI ID:</span>
+              <span className="upi-value">{upiDetails.upi_id}</span>
+            </div>
+            {upiDetails.holder_name && (
               <div className="upi-item">
-                <span className="upi-label">UPI ID:</span>
-                <span className="upi-value">{upiDetails.upi_id}</span>
+                <span className="upi-label">Account Holder:</span>
+                <span className="upi-value">{upiDetails.holder_name}</span>
               </div>
-              {upiDetails.holder_name && (
-                <div className="upi-item">
-                  <span className="upi-label">Account Holder:</span>
-                  <span className="upi-value">{upiDetails.holder_name}</span>
-                </div>
-              )}
-              <div className="upi-actions">
-                <button 
-                  className="delete-upi-btn"
-                  onClick={async () => {
-                    if (window.confirm('Are you sure you want to delete your UPI details?')) {
-                      try {
-                        const token = localStorage.getItem('token');
-                        await axios.delete(`${config.API_BASE_URL}/mentor/${user.id}/upi`, {
-                          headers: { Authorization: `Bearer ${token}` }
-                        });
-                        setUpiDetails({ upi_id: '', holder_name: '' });
-                        setMessage('UPI details deleted successfully!');
-                        setTimeout(() => setMessage(''), 3000);
-                      } catch (error) {
-                        setMessage('Failed to delete UPI details');
-                        console.error('Delete UPI error:', error);
-                      }
-                    }
-                  }}
-                >
-                  🗑️ Delete UPI
-                </button>
-              </div>
+            )}
+            <div className="upi-actions">
+              <button 
+                className="delete-upi-btn"
+                onClick={deleteUpiDetails}
+              >
+                🗑️ Delete UPI
+              </button>
             </div>
-          )}
-          
-          {showUpiForm && (
-            <div className="upi-form">
-              <div className="form-group">
-                <label>UPI ID *</label>
-                <input
-                  type="text"
-                  placeholder="yourname@paytm / yourname@gpay"
-                  value={upiDetails.upi_id}
-                  onChange={(e) => setUpiDetails({...upiDetails, upi_id: e.target.value})}
-                />
-              </div>
-              <div className="form-group">
-                <label>Account Holder Name</label>
-                <input
-                  type="text"
-                  placeholder="Full name as per bank account"
-                  value={upiDetails.holder_name}
-                  onChange={(e) => setUpiDetails({...upiDetails, holder_name: e.target.value})}
-                />
-              </div>
-              <div className="form-actions">
-                <button 
-                  className="save-btn"
-                  onClick={saveUpiDetails}
-                  disabled={loading}
-                >
-                  {loading ? 'Saving...' : 'Save UPI Details'}
-                </button>
-                <button 
-                  className="cancel-btn"
-                  onClick={() => setShowUpiForm(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {message && (
-            <div className={`message ${message.includes('success') ? 'success' : 'error'}`}>
-              {message}
-            </div>
-          )}
-        </div>
-        
-        <div className="transaction-history">
-          <h4>Recent Transactions</h4>
-          <div className="transaction-item">
-            <span>Session with John Doe</span>
-            <span>+₹500</span>
           </div>
+        )}
+        
+        {showUpiForm && (
+          <div className="upi-form">
+            <div className="form-group">
+              <label>UPI ID *</label>
+              <input
+                type="text"
+                placeholder="yourname@paytm / yourname@gpay"
+                value={upiDetails.upi_id}
+                onChange={(e) => setUpiDetails({...upiDetails, upi_id: e.target.value})}
+              />
+            </div>
+            <div className="form-group">
+              <label>Account Holder Name</label>
+              <input
+                type="text"
+                placeholder="Full name as per bank account"
+                value={upiDetails.holder_name}
+                onChange={(e) => setUpiDetails({...upiDetails, holder_name: e.target.value})}
+              />
+            </div>
+            <div className="form-actions">
+              <button 
+                className="save-btn"
+                onClick={saveUpiDetails}
+                disabled={upiLoading}
+              >
+                {upiLoading ? 'Saving...' : 'Save UPI Details'}
+              </button>
+              <button 
+                className="cancel-btn"
+                onClick={() => setShowUpiForm(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {upiMessage && (
+          <div className={`message ${upiMessage.includes('success') ? 'success' : 'error'}`}>
+            {upiMessage}
+          </div>
+        )}
+      </div>
+      
+      <div className="transaction-history">
+        <h4>Recent Transactions</h4>
+        <div className="transaction-item">
+          <span>Session with John Doe</span>
+          <span>+₹500</span>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
   const renderNotifications = () => (
     <div className="notifications-content">
