@@ -12,7 +12,6 @@ import RobustWebRTCCall from './RobustWebRTCCall';
 import './MentorDashboard.css';
 import './LogoStyles.css';
 import './MentorLogoStyles.css';
-import React from 'react';
 
 const MentorDashboard = ({ user, onLogout }) => {
   // All useState hooks must be at the top
