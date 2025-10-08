@@ -742,25 +742,13 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         });
         
         const videoTrack = screenStream.getVideoTracks()[0];
-        // Try to add as a separate sender first so camera remains published
-        let screenSender = null;
-        try {
-          screenSender = peerConnectionRef.current.addTrack(videoTrack, screenStream);
-        } catch (e) {
-          console.warn('addTrack failed for screen, will fallback to replaceTrack', e);
+        // Replace the existing video sender so camera is hidden while screen is shared
+        const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(videoTrack);
+          // mark so stopScreenShare knows to restore camera
+          peerConnectionRef.current._screenReplaced = true;
         }
-
-        // If addTrack didn't create a sender, fallback to replacing the existing video sender
-        if (!screenSender) {
-          const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) {
-            await sender.replaceTrack(videoTrack);
-            screenSender = sender;
-          }
-        }
-
-        // store reference so we can remove on stop
-        peerConnectionRef.current._screenSender = screenSender;
         
         videoTrack.onended = () => stopScreenShare();
         setIsScreenSharing(true);
@@ -774,27 +762,15 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
 
   const stopScreenShare = async () => {
     try {
-      const screenSender = peerConnectionRef.current && peerConnectionRef.current._screenSender;
-      if (screenSender) {
-        try {
-          // If we added a dedicated sender for screen, remove it
-          peerConnectionRef.current.removeTrack(screenSender);
-        } catch (e) {
-          console.warn('Failed to remove screen sender, will attempt to restore camera via replaceTrack', e);
-          // fallback: replace with camera track
-          if (localStream) {
-            const videoTrack = localStream.getVideoTracks()[0];
-            const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender && videoTrack) await sender.replaceTrack(videoTrack);
-          }
-        }
-      } else if (localStream) {
+      // If we replaced the sender earlier, restore camera by replacing with local video track
+      if (peerConnectionRef.current && peerConnectionRef.current._screenReplaced && localStream) {
         const videoTrack = localStream.getVideoTracks()[0];
         const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender && videoTrack) await sender.replaceTrack(videoTrack);
+        peerConnectionRef.current._screenReplaced = false;
       }
     } catch (err) {
-      console.warn('Error stopping screen share:', err);
+      console.warn('Error restoring camera after screen share:', err);
     }
     setIsScreenSharing(false);
   };
