@@ -858,7 +858,13 @@ app.post('/api/mentor/:mentorId/upi', async (req, res) => {
     
     res.json({ message: 'UPI details saved successfully' });
   } catch (error) {
-    console.error('Save UPI details error:', error);
+    // Enhanced logging for debugging
+    console.error('Save UPI details error:', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack
+    });
     if (error.code === '23505') { // Unique constraint violation
       res.status(400).json({ error: 'UPI details already exist for this mentor' });
     } else {
@@ -955,7 +961,13 @@ app.post('/api/blogs/:blogId/view', async (req, res) => {
     
     res.json({ message: 'View tracked' });
   } catch (error) {
-    console.error('Track blog view error:', error);
+    // Enhanced logging for debugging
+    console.error('Track blog view error:', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack
+    });
     res.status(500).json({ error: 'Server error' });
   }
 });
