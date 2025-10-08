@@ -3,7 +3,7 @@ import axios from 'axios';
 import config from '../config';
 import './BlogSection.css';
 
-const BlogSection = ({ user, userRole }) => {
+const BlogSection = ({ user, userRole, initialBlogs = null, limit = null }) => {
   const [blogs, setBlogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedBlog, setSelectedBlog] = useState(null);
@@ -15,13 +15,21 @@ const BlogSection = ({ user, userRole }) => {
   const [lastFetch, setLastFetch] = useState(null);
 
   useEffect(() => {
+    // If initialBlogs supplied by parent (e.g., home popular blogs), use them and skip fetching
+    if (initialBlogs && Array.isArray(initialBlogs)) {
+      setBlogs(limit ? initialBlogs.slice(0, limit) : initialBlogs);
+      // still load liked blogs for mentee so like buttons work
+      if (user && user.id && userRole === 'mentee') loadLikedBlogs();
+      return;
+    }
+
     if (user && user.id) {
       loadBlogs();
       if (userRole === 'mentee') {
         loadLikedBlogs();
       }
     }
-  }, [user, userRole]);
+  }, [user, userRole, initialBlogs, limit]);
 
   const loadBlogs = async () => {
     if (!user || !user.id) {

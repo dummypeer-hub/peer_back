@@ -82,6 +82,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Body parsing middleware: ensure this runs before any route handlers so req.body is defined
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 // Helper to provide allowed origins list to handlers that set headers manually
 const getAllowedOrigins = () => [
   'https://www.peerverse.in',
@@ -130,6 +134,9 @@ const mailjet = require('node-mailjet').apiConnect(
   process.env.MAILJET_API_KEY,
   process.env.MAILJET_SECRET_KEY
 );
+
+// Validation middleware (Joi)
+const { validateBody, schemas } = require('./middleware/validate');
 
 // Send OTP email with retry mechanism
 const sendOTPEmail = async (email, otp, purpose, retryCount = 0) => {
@@ -608,10 +615,14 @@ app.options('/api/mentor/:mentorId/upi', (req, res) => {
 });
 
 // Submit session feedback and update mentor rating
-app.post('/api/session-feedback', async (req, res) => {
+app.post('/api/session-feedback', validateBody(schemas.sessionFeedbackSchema), async (req, res) => {
   // CORS handled by middleware
   
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      console.warn('Session feedback received empty body');
+      return res.status(400).json({ error: 'Request body is required' });
+    }
     const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
     
     if (!sessionId || !menteeId || !rating) {
@@ -816,11 +827,15 @@ app.get('/api/mentor/:mentorId/upi', async (req, res) => {
 });
 
 // Save/Update mentor UPI details
-app.post('/api/mentor/:mentorId/upi', async (req, res) => {
+app.post('/api/mentor/:mentorId/upi', validateBody(schemas.mentorUpiSchema), async (req, res) => {
   // CORS handled by middleware
   
   try {
     const { mentorId } = req.params;
+    if (!req.body || typeof req.body !== 'object') {
+      console.warn('Save UPI received empty body for mentorId:', mentorId);
+      return res.status(400).json({ error: 'Request body is required' });
+    }
     const { upi_id, holder_name } = req.body;
     
     if (!upi_id || !upi_id.trim()) {
@@ -940,9 +955,13 @@ app.get('/api/blogs/popular', async (req, res) => {
 });
 
 // Track blog view
-app.post('/api/blogs/:blogId/view', async (req, res) => {
+app.post('/api/blogs/:blogId/view', validateBody(schemas.blogViewSchema), async (req, res) => {
   try {
     const { blogId } = req.params;
+    if (!req.body || typeof req.body !== 'object') {
+      console.warn('Track blog view received empty body for blogId:', blogId);
+      return res.status(400).json({ error: 'Request body is required' });
+    }
     const { userId } = req.body;
     const ipAddress = req.ip;
     
@@ -979,8 +998,6 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Apply rate limiter only to auth routes
 app.use('/api/login', limiter);
 app.use('/api/signup', limiter);

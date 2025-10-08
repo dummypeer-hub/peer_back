@@ -917,25 +917,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 <h2>📝 Latest Blogs</h2>
                 <p>Top 9 latest blogs from our mentors</p>
               </div>
-              <div className="blogs-grid">
-                {popularBlogs.map(blog => (
-                  <div key={blog.id} className="blog-card" onClick={() => handleViewBlog(blog.id)}>
-                    <div className="blog-header">
-                      <h3>{blog.title}</h3>
-                      <div className="blog-stats">
-                        <span className="likes-stat">❤️ {blog.likes_count}</span>
-                        <span>👁️ {blog.view_count}</span>
-                        <span>💬 {blog.comments_count}</span>
-                      </div>
-                    </div>
-                    <p className="blog-description">{blog.description}</p>
-                    <div className="blog-footer">
-                      <span className="blog-author">By {blog.mentor_name}</span>
-                      <span className="blog-date">{new Date(blog.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <BlogSection user={user} userRole="mentee" initialBlogs={popularBlogs} limit={9} />
             </div>
           )}
           

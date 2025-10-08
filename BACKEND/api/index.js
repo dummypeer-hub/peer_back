@@ -8,6 +8,9 @@ require('dotenv').config();
 
 const app = express();
 
+// Validation middleware
+const { validateBody, schemas } = require('../middleware/validate');
+
 // Environment variables with fallbacks
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
@@ -894,8 +897,12 @@ app.get('/api/video-calls/:userId', async (req, res) => {
 });
 
 // Submit session feedback and update mentor rating
-app.post('/api/session-feedback', async (req, res) => {
+app.post('/api/session-feedback', validateBody(schemas.sessionFeedbackSchema), async (req, res) => {
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      console.warn('API session-feedback received empty body');
+      return res.status(400).json({ error: 'Request body is required' });
+    }
     const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
     
     if (!sessionId || !menteeId || !rating) {
