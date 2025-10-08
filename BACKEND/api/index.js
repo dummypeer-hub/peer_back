@@ -85,6 +85,19 @@ pool.connect(async (err, client, release) => {
         );
         
         CREATE UNIQUE INDEX IF NOT EXISTS idx_mentor_ratings_unique ON mentor_ratings(mentor_id);
+        
+        CREATE TABLE IF NOT EXISTS mentor_upi_details (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          upi_id VARCHAR(255) NOT NULL,
+          holder_name VARCHAR(255),
+          is_verified BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(mentor_id)
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_mentor_upi_mentor_id ON mentor_upi_details(mentor_id);
       `);
       console.log('Feedback tables created/verified successfully');
     } catch (tableError) {
@@ -732,6 +745,84 @@ app.get('/api/mentor/stats/:mentorId', async (req, res) => {
     });
   } catch (error) {
     console.error('Get mentor stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get mentor UPI details
+app.get('/api/mentor/:mentorId/upi', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    const result = await pool.query(
+      'SELECT upi_id, holder_name, is_verified FROM mentor_upi_details WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    if (result.rows.length > 0) {
+      res.json({ upiDetails: result.rows[0] });
+    } else {
+      res.json({ upiDetails: null });
+    }
+  } catch (error) {
+    console.error('Get UPI details error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Save/Update mentor UPI details
+app.post('/api/mentor/:mentorId/upi', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    const { upi_id, holder_name } = req.body;
+    
+    if (!upi_id || !upi_id.trim()) {
+      return res.status(400).json({ error: 'UPI ID is required' });
+    }
+    
+    const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+    if (!upiRegex.test(upi_id.trim())) {
+      return res.status(400).json({ error: 'Invalid UPI ID format' });
+    }
+    
+    const existing = await pool.query(
+      'SELECT id FROM mentor_upi_details WHERE mentor_id = $1',
+      [mentorId]
+    );
+    
+    if (existing.rows.length > 0) {
+      await pool.query(
+        'UPDATE mentor_upi_details SET upi_id = $1, holder_name = $2, updated_at = CURRENT_TIMESTAMP WHERE mentor_id = $3',
+        [upi_id.trim(), holder_name?.trim() || null, mentorId]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO mentor_upi_details (mentor_id, upi_id, holder_name) VALUES ($1, $2, $3)',
+        [mentorId, upi_id.trim(), holder_name?.trim() || null]
+      );
+    }
+    
+    res.json({ message: 'UPI details saved successfully' });
+  } catch (error) {
+    console.error('Save UPI details error:', error);
+    if (error.code === '23505') {
+      res.status(400).json({ error: 'UPI details already exist for this mentor' });
+    } else {
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+});
+
+// Delete mentor UPI details
+app.delete('/api/mentor/:mentorId/upi', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    await pool.query(
+      'DELETE FROM mentor_upi_details WHERE mentor_id = $1',
+      [mentorId]
+    );
+    res.json({ message: 'UPI details deleted successfully' });
+  } catch (error) {
+    console.error('Delete UPI details error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
