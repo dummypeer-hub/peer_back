@@ -132,17 +132,12 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const [newMessage, setNewMessage] = useState('');
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
   const [sessionStarted, setSessionStarted] = useState(false);
-  const [chatPosition, setChatPosition] = useState({ x: 20, y: 20 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
 
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
   const dataChannelRef = useRef();
   const socketRef = useRef();
   const pcRef = useRef();
-  const chatPanelRef = useRef();
 
   const WEBRTC_CONFIG = {
     iceServers: [
@@ -564,48 +559,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleMouseDown = (e) => {
-    if (e.target.closest('.chat-header')) {
-      setIsDragging(true);
-      const rect = chatPanelRef.current.getBoundingClientRect();
-      setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      });
-    }
-  };
-
-  const handleMouseMove = (e) => {
-    if (isDragging) {
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
-      
-      // Keep within viewport bounds
-      const maxX = window.innerWidth - 320;
-      const maxY = window.innerHeight - (isChatCollapsed ? 48 : 400);
-      
-      setChatPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
-      });
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, dragOffset]);
-
   return (
     <div className="cloudflare-video-call">
       <div className="video-container">
@@ -662,51 +615,27 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         </div>
       </div>
 
-      <div 
-        ref={chatPanelRef}
-        className={`chat-panel ${isDragging ? 'dragging' : ''} ${isChatCollapsed ? 'collapsed' : ''}`}
-        style={{
-          right: 'auto',
-          top: 'auto',
-          left: `${chatPosition.x}px`,
-          top: `${chatPosition.y}px`
-        }}
-        onMouseDown={handleMouseDown}
-      >
-        <div className="chat-header">
-          <h4 className="chat-title">💬 Chat</h4>
-          <button 
-            className="chat-toggle"
-            onClick={() => setIsChatCollapsed(!isChatCollapsed)}
-          >
-            {isChatCollapsed ? '▲' : '▼'}
-          </button>
+      <div className="chat-panel">
+        <div className="chat-messages">
+          {messages.map((msg, index) => (
+            <div key={index} className="chat-message">
+              <span className="sender">{msg.sender}:</span>
+              <span className="text">{msg.text}</span>
+              <span className="time">{msg.timestamp}</span>
+            </div>
+          ))}
         </div>
         
-        {!isChatCollapsed && (
-          <>
-            <div className="chat-messages">
-              {messages.map((msg, index) => (
-                <div key={index} className="chat-message">
-                  <span className="sender">{msg.sender}</span>
-                  <span className="text">{msg.text}</span>
-                  <span className="time">{msg.timestamp}</span>
-                </div>
-              ))}
-            </div>
-            
-            <div className="chat-input">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                placeholder="Type a message..."
-              />
-              <button onClick={sendMessage}>Send</button>
-            </div>
-          </>
-        )}
+        <div className="chat-input">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Type a message..."
+          />
+          <button onClick={sendMessage}>Send</button>
+        </div>
       </div>
     </div>
   );
