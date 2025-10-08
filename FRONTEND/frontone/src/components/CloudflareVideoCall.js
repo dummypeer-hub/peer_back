@@ -133,7 +133,7 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
   const [sessionStarted, setSessionStarted] = useState(false);
   
-  // NEW: Chat panel states
+  // Chat panel states
   const [isChatMinimized, setIsChatMinimized] = useState(false);
 
   const localVideoRef = useRef();
@@ -142,9 +142,11 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const socketRef = useRef();
   const pcRef = useRef();
   
-  // NEW: Chat panel refs
+  // Chat panel refs
   const chatPanelRef = useRef(null);
   const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
+  const originalStreamRef = useRef(null); // Store original camera stream
 
   const WEBRTC_CONFIG = {
     iceServers: [
@@ -184,10 +186,11 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     }
   }, [sessionStarted, timeLeft]);
 
-  // NEW: Drag functionality for chat panel
+  // Drag and Resize functionality for chat panel
   useEffect(() => {
     const chatPanel = chatPanelRef.current;
     const chatHeader = chatPanel?.querySelector('.chat-header');
+    const resizeHandle = chatPanel?.querySelector('.resize-handle');
     
     if (!chatPanel || !chatHeader) return;
 
@@ -195,14 +198,17 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     let currentY = 0;
     let initialX = 0;
     let initialY = 0;
+    let initialWidth = 0;
+    let initialHeight = 0;
+    let startX = 0;
+    let startY = 0;
 
+    // ===== DRAG FUNCTIONALITY =====
     const onMouseDown = (e) => {
-      // Only allow dragging from header, not from control buttons
-      if (e.target.closest('.chat-controls')) return;
+      if (e.target.closest('.chat-controls') || e.target.closest('.resize-handle')) return;
       
       isDraggingRef.current = true;
       
-      // Get current position
       const rect = chatPanel.getBoundingClientRect();
       initialX = e.clientX - rect.left;
       initialY = e.clientY - rect.top;
@@ -212,24 +218,41 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     };
 
     const onMouseMove = (e) => {
-      if (!isDraggingRef.current) return;
+      if (isDraggingRef.current) {
+        e.preventDefault();
+        
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
+        
+        const maxX = window.innerWidth - chatPanel.offsetWidth;
+        const maxY = window.innerHeight - chatPanel.offsetHeight - 100;
+        
+        currentX = Math.max(0, Math.min(currentX, maxX));
+        currentY = Math.max(0, Math.min(currentY, maxY));
+        
+        chatPanel.style.left = currentX + 'px';
+        chatPanel.style.top = currentY + 'px';
+        chatPanel.style.right = 'auto';
+        chatPanel.style.transform = 'none';
+      }
       
-      e.preventDefault();
-      
-      currentX = e.clientX - initialX;
-      currentY = e.clientY - initialY;
-      
-      // Keep within viewport bounds
-      const maxX = window.innerWidth - chatPanel.offsetWidth;
-      const maxY = window.innerHeight - chatPanel.offsetHeight - 100; // 100px for controls
-      
-      currentX = Math.max(0, Math.min(currentX, maxX));
-      currentY = Math.max(0, Math.min(currentY, maxY));
-      
-      chatPanel.style.left = currentX + 'px';
-      chatPanel.style.top = currentY + 'px';
-      chatPanel.style.right = 'auto';
-      chatPanel.style.transform = 'none';
+      if (isResizingRef.current) {
+        e.preventDefault();
+        
+        const newWidth = initialWidth + (e.clientX - startX);
+        const newHeight = initialHeight + (e.clientY - startY);
+        
+        const minWidth = 280;
+        const minHeight = 300;
+        const maxWidth = 600;
+        const maxHeight = window.innerHeight - 180;
+        
+        const finalWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+        const finalHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
+        
+        chatPanel.style.width = finalWidth + 'px';
+        chatPanel.style.height = finalHeight + 'px';
+      }
     };
 
     const onMouseUp = () => {
@@ -237,10 +260,28 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         isDraggingRef.current = false;
         chatHeader.style.cursor = 'grab';
       }
+      if (isResizingRef.current) {
+        isResizingRef.current = false;
+      }
     };
 
+    // ===== RESIZE FUNCTIONALITY =====
+    const onResizeMouseDown = (e) => {
+      isResizingRef.current = true;
+      
+      const rect = chatPanel.getBoundingClientRect();
+      initialWidth = rect.width;
+      initialHeight = rect.height;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    // ===== TOUCH SUPPORT =====
     const onTouchStart = (e) => {
-      if (e.target.closest('.chat-controls')) return;
+      if (e.target.closest('.chat-controls') || e.target.closest('.resize-handle')) return;
       
       isDraggingRef.current = true;
       const touch = e.touches[0];
@@ -282,6 +323,10 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
     
+    if (resizeHandle) {
+      resizeHandle.addEventListener('mousedown', onResizeMouseDown);
+    }
+    
     chatHeader.addEventListener('touchstart', onTouchStart, { passive: false });
     document.addEventListener('touchmove', onTouchMove, { passive: false });
     document.addEventListener('touchend', onTouchEnd);
@@ -292,6 +337,10 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       
+      if (resizeHandle) {
+        resizeHandle.removeEventListener('mousedown', onResizeMouseDown);
+      }
+      
       chatHeader.removeEventListener('touchstart', onTouchStart);
       document.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('touchend', onTouchEnd);
@@ -300,19 +349,14 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
 
   const initializeCall = async () => {
     try {
-      // Test connectivity first
       console.log('Testing connectivity...');
       const connectivityResults = await testConnectivity(WEBRTC_CONFIG.iceServers);
       console.log('Connectivity test results:', connectivityResults);
       
-      // Get user media with mobile-optimized constraints
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
       let stream = null;
-      let hasVideo = false;
-      let hasAudio = false;
       
-      // Try to get video first
       try {
         const videoConstraints = isMobile ? {
           width: { ideal: 640, max: 1280 },
@@ -335,38 +379,30 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
             autoGainControl: true
           }
         });
-        hasVideo = true;
-        hasAudio = true;
         console.log('✅ Full media access successful');
       } catch (error) {
         console.warn('Full media failed, trying video only:', error.message);
         
-        // Try video only
         try {
           stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          hasVideo = true;
           console.log('✅ Video-only access successful');
         } catch (videoError) {
           console.warn('Video failed, trying audio only:', videoError.message);
           
-          // Try audio only
           try {
             stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            hasAudio = true;
             console.log('✅ Audio-only access successful');
           } catch (audioError) {
             console.warn('Audio failed, continuing without media:', audioError.message);
             
-            // Create empty stream for meeting without media
             const confirmed = window.confirm(
-              'Camera and microphone access failed. Do you want to join the meeting without video and audio? You can enable them later.'
+              'Camera and microphone access failed. Do you want to join the meeting without video and audio?'
             );
             
             if (!confirmed) {
               throw new Error('User cancelled meeting due to media access issues');
             }
             
-            // Create a dummy stream
             stream = new MediaStream();
             console.log('⚠️ Joining meeting without media');
           }
@@ -374,11 +410,12 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       }
       
       setLocalStream(stream);
+      originalStreamRef.current = stream; // Store original stream
+      
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection using utility function
       const pc = createPeerConnection(
         (candidate) => {
           if (socketManager.isConnected()) {
@@ -405,12 +442,10 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         }
       );
       
-      // Add local stream to peer connection
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
 
-      // Create data channel for chat (only for mentor)
       if (user.role === 'mentor') {
         const dataChannel = pc.createDataChannel('chat');
         dataChannel.onopen = () => {
@@ -423,7 +458,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         dataChannelRef.current = dataChannel;
       }
 
-      // Handle incoming data channel (for mentee)
       pc.ondatachannel = (event) => {
         console.log('Received data channel');
         const channel = event.channel;
@@ -438,8 +472,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       };
 
       setPeerConnection(pc);
-
-      // Start signaling
       await handleSignaling(pc);
 
     } catch (error) {
@@ -454,17 +486,14 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
 
   const handleSignaling = async (pc) => {
     try {
-      // Use singleton socket manager with proper await
       const socket = await socketManager.connect();
       socketRef.current = socket;
       pcRef.current = pc;
       
       console.log(`${user.role} joining call ${callId}`);
       
-      // Join user room
       socket.emit('join_user_room', user.id);
       
-      // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && socketManager.isConnected()) {
           console.log('Sending ICE candidate:', event.candidate);
@@ -476,7 +505,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         }
       };
       
-      // Register call-specific handlers
       socketManager.registerCall(callId, {
         onOffer: async (data) => {
           console.log('Received offer:', data);
@@ -523,7 +551,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         }
       });
       
-      // Create offer if mentor (after a small delay)
       if (user.role === 'mentor') {
         setTimeout(async () => {
           try {
@@ -597,6 +624,15 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
           await sender.replaceTrack(videoTrack);
         }
         
+        // Update local video to show screen share
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = screenStream;
+          // Add class to remove mirror effect for screen share
+          if (localVideoRef.current.parentElement) {
+            localVideoRef.current.parentElement.classList.add('screen-sharing');
+          }
+        }
+        
         videoTrack.onended = () => {
           stopScreenShare();
         };
@@ -611,14 +647,23 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   };
 
   const stopScreenShare = async () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    if (originalStreamRef.current) {
+      const videoTrack = originalStreamRef.current.getVideoTracks()[0];
       const sender = peerConnection.getSenders().find(s => 
         s.track && s.track.kind === 'video'
       );
       
       if (sender && videoTrack) {
         await sender.replaceTrack(videoTrack);
+      }
+      
+      // Restore original camera stream
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = originalStreamRef.current;
+        // Remove screen-sharing class to restore mirror effect
+        if (localVideoRef.current.parentElement) {
+          localVideoRef.current.parentElement.classList.remove('screen-sharing');
+        }
       }
     }
     setIsScreenSharing(false);
@@ -665,10 +710,12 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
+    if (originalStreamRef.current) {
+      originalStreamRef.current.getTracks().forEach(track => track.stop());
+    }
     if (pcRef.current) {
       pcRef.current.close();
     }
-    // Unregister this call from socket manager
     socketManager.unregisterCall(callId);
   };
 
@@ -678,7 +725,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // NEW: Toggle chat minimize function
   const toggleChatMinimize = () => {
     setIsChatMinimized(!isChatMinimized);
   };
@@ -704,9 +750,9 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
           />
         </div>
         
-        <div className="local-video">
+        <div className={`local-video ${isScreenSharing ? 'screen-sharing' : ''}`}>
           <video ref={localVideoRef} autoPlay playsInline muted />
-          {isVideoOff && (
+          {isVideoOff && !isScreenSharing && (
             <div className="camera-off-overlay">
               <div className="camera-off-icon">📹</div>
               <span>Camera Off</span>
@@ -757,7 +803,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         </div>
       </div>
 
-      {/* UPDATED: Chat Panel with drag and minimize functionality */}
       <div 
         ref={chatPanelRef}
         className={`chat-panel ${isChatMinimized ? 'minimized' : ''}`}
@@ -801,6 +846,8 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
                 Send
               </button>
             </div>
+            
+            <div className="resize-handle"></div>
           </>
         )}
       </div>
