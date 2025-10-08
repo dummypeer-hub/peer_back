@@ -29,6 +29,68 @@ const CLOUDFLARE_APP_ID = 'ccb11479d57e58d6450a4743bad9a1e8';
 const CLOUDFLARE_API_TOKEN = '75063d2f78527ff8115025d127e87619d62c4428ed6ff1b001fc3cf03d0ba514';
 const TURN_KEY_ID = CLOUDFLARE_APP_ID;
 
+// CORS configuration - placed early so it applies to all routes
+const corsOptions = {
+  origin: [
+    'https://www.peerverse.in',
+    'https://peerverse.in',
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Origin',
+    'X-Requested-With',
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'Cache-Control'
+  ],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+// Preflight handler for all routes
+app.options('*', cors(corsOptions));
+
+// Manual CORS fallback (keeps behavior if cors middleware ever misses a case)
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'https://www.peerverse.in',
+    'https://peerverse.in',
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ];
+  const origin = req.headers.origin;
+
+  if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  next();
+});
+
+// Helper to provide allowed origins list to handlers that set headers manually
+const getAllowedOrigins = () => [
+  'https://www.peerverse.in',
+  'https://peerverse.in',
+  'https://peerverse-final.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:3001'
+];
+
 // Optimized in-memory cache
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes for faster updates
@@ -537,29 +599,17 @@ app.get('/api/mentee/:menteeId/favorite-mentors', async (req, res) => {
 
 // Handle preflight OPTIONS request for session-feedback
 app.options('/api/session-feedback', (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.sendStatus(200);
 });
 
 // Handle preflight OPTIONS request for UPI endpoints
 app.options('/api/mentor/:mentorId/upi', (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.sendStatus(200);
 });
 
 // Submit session feedback and update mentor rating
 app.post('/api/session-feedback', async (req, res) => {
-  // Add CORS headers specifically for this endpoint
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  // CORS handled by middleware
   
   try {
     const { sessionId, menteeId, mentorId, rating, feedback } = req.body;
@@ -706,13 +756,7 @@ app.get('/api/mentor/:mentorId/detailed-feedback', async (req, res) => {
 
 // Get mentor feedback and ratings
 app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
-  // Add CORS headers
-  const origin = req.headers.origin;
-  const allowedOrigins = getAllowedOrigins();
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  // CORS handled by middleware
   
   try {
     const { mentorId } = req.params;
@@ -750,9 +794,7 @@ app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
 
 // Get mentor UPI details
 app.get('/api/mentor/:mentorId/upi', async (req, res) => {
-  // Add CORS headers
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  // CORS handled by middleware
   
   try {
     const { mentorId } = req.params;
@@ -775,9 +817,7 @@ app.get('/api/mentor/:mentorId/upi', async (req, res) => {
 
 // Save/Update mentor UPI details
 app.post('/api/mentor/:mentorId/upi', async (req, res) => {
-  // Add CORS headers
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  // CORS handled by middleware
   
   try {
     const { mentorId } = req.params;
@@ -829,9 +869,7 @@ app.post('/api/mentor/:mentorId/upi', async (req, res) => {
 
 // Delete mentor UPI details
 app.delete('/api/mentor/:mentorId/upi', async (req, res) => {
-  // Add CORS headers
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  // CORS handled by middleware
   
   try {
     const { mentorId } = req.params;
@@ -929,61 +967,6 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// Enhanced CORS configuration
-const corsOptions = {
-  origin: [
-    'https://www.peerverse.in',
-    'https://peerverse.in',
-    'https://peerverse-final.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Origin',
-    'X-Requested-With',
-    'Content-Type',
-    'Accept',
-    'Authorization',
-    'Cache-Control'
-  ],
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
-
-// Manual CORS headers as backup
-app.use((req, res, next) => {
-  const allowedOrigins = [
-    'https://www.peerverse.in',
-    'https://peerverse.in',
-    'https://peerverse-final.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ];
-  
-  const origin = req.headers.origin;
-  
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
-  
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
-  
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-  
-  next();
-});
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Apply rate limiter only to auth routes
