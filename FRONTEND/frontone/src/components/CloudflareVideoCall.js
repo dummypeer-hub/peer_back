@@ -187,102 +187,69 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     }
   }, [sessionStarted, timeLeft]);
 
-  // Drag and resize functionality for chat panel
+  // Simple drag functionality for chat panel
   useEffect(() => {
     const chatPanel = chatPanelRef.current;
-    if (!chatPanel) return;
+    const chatHeader = chatPanel?.querySelector('.chat-header');
+    
+    if (!chatPanel || !chatHeader) return;
 
     let isDragging = false;
-    let isResizing = false;
     let startX = 0;
     let startY = 0;
     let startLeft = 0;
     let startTop = 0;
-    let startWidth = 0;
-    let startHeight = 0;
 
     const handleMouseDown = (e) => {
-      const chatHeader = e.target.closest('.chat-header');
-      const resizeHandle = e.target.closest('.resize-handle');
-      const chatControls = e.target.closest('.chat-controls');
+      if (e.target.closest('.chat-controls')) return;
       
-      if (chatControls) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
       
-      if (resizeHandle) {
-        isResizing = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        const rect = chatPanel.getBoundingClientRect();
-        startWidth = rect.width;
-        startHeight = rect.height;
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
+      const rect = chatPanel.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
       
-      if (chatHeader) {
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        
-        const rect = chatPanel.getBoundingClientRect();
-        startLeft = rect.left;
-        startTop = rect.top;
-        
-        chatPanel.style.position = 'fixed';
-        chatPanel.style.left = startLeft + 'px';
-        chatPanel.style.top = startTop + 'px';
-        chatPanel.style.right = 'auto';
-        chatPanel.style.transform = 'none';
-        
-        e.preventDefault();
-      }
+      chatPanel.style.position = 'fixed';
+      chatPanel.style.left = startLeft + 'px';
+      chatPanel.style.top = startTop + 'px';
+      chatPanel.style.right = 'auto';
+      chatPanel.style.transform = 'none';
+      
+      e.preventDefault();
     };
 
     const handleMouseMove = (e) => {
-      if (isDragging) {
-        const deltaX = e.clientX - startX;
-        const deltaY = e.clientY - startY;
-        
-        let newLeft = startLeft + deltaX;
-        let newTop = startTop + deltaY;
-        
-        const maxX = window.innerWidth - chatPanel.offsetWidth;
-        const maxY = window.innerHeight - chatPanel.offsetHeight;
-        
-        newLeft = Math.max(0, Math.min(newLeft, maxX));
-        newTop = Math.max(0, Math.min(newTop, maxY));
-        
-        chatPanel.style.left = newLeft + 'px';
-        chatPanel.style.top = newTop + 'px';
-      }
+      if (!isDragging) return;
       
-      if (isResizing) {
-        const deltaX = e.clientX - startX;
-        const deltaY = e.clientY - startY;
-        
-        let newWidth = startWidth + deltaX;
-        let newHeight = startHeight + deltaY;
-        
-        newWidth = Math.max(280, Math.min(newWidth, 600));
-        newHeight = Math.max(300, Math.min(newHeight, window.innerHeight - 180));
-        
-        chatPanel.style.width = newWidth + 'px';
-        chatPanel.style.height = newHeight + 'px';
-      }
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      let newLeft = startLeft + deltaX;
+      let newTop = startTop + deltaY;
+      
+      // Keep within bounds
+      const maxX = window.innerWidth - chatPanel.offsetWidth;
+      const maxY = window.innerHeight - chatPanel.offsetHeight;
+      
+      newLeft = Math.max(0, Math.min(newLeft, maxX));
+      newTop = Math.max(0, Math.min(newTop, maxY));
+      
+      chatPanel.style.left = newLeft + 'px';
+      chatPanel.style.top = newTop + 'px';
     };
 
     const handleMouseUp = () => {
       isDragging = false;
-      isResizing = false;
     };
 
-    document.addEventListener('mousedown', handleMouseDown);
+    chatHeader.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
+      chatHeader.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
