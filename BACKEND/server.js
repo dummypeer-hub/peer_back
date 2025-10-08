@@ -544,6 +544,15 @@ app.options('/api/session-feedback', (req, res) => {
   res.sendStatus(200);
 });
 
+// Handle preflight OPTIONS request for UPI endpoints
+app.options('/api/mentor/:mentorId/upi', (req, res) => {
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.sendStatus(200);
+});
+
 // Submit session feedback and update mentor rating
 app.post('/api/session-feedback', async (req, res) => {
   // Add CORS headers specifically for this endpoint
@@ -733,6 +742,10 @@ app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
 
 // Get mentor UPI details
 app.get('/api/mentor/:mentorId/upi', async (req, res) => {
+  // Add CORS headers
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   try {
     const { mentorId } = req.params;
     
@@ -754,6 +767,10 @@ app.get('/api/mentor/:mentorId/upi', async (req, res) => {
 
 // Save/Update mentor UPI details
 app.post('/api/mentor/:mentorId/upi', async (req, res) => {
+  // Add CORS headers
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   try {
     const { mentorId } = req.params;
     const { upi_id, holder_name } = req.body;
@@ -804,6 +821,10 @@ app.post('/api/mentor/:mentorId/upi', async (req, res) => {
 
 // Delete mentor UPI details
 app.delete('/api/mentor/:mentorId/upi', async (req, res) => {
+  // Add CORS headers
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   try {
     const { mentorId } = req.params;
     
