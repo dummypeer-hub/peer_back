@@ -751,29 +751,11 @@ app.get('/api/mentor/:mentorId/feedback', async (req, res) => {
 // Get mentor UPI details
 app.get('/api/mentor/:mentorId/upi', async (req, res) => {
   // Add CORS headers
-  const origin = req.headers.origin;
-  const allowedOrigins = getAllowedOrigins();
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
   
   try {
     const { mentorId } = req.params;
-    
-    // Ensure UPI table exists
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS mentor_upi_details (
-        id SERIAL PRIMARY KEY,
-        mentor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        upi_id VARCHAR(255) NOT NULL,
-        holder_name VARCHAR(255),
-        is_verified BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(mentor_id)
-      )
-    `);
     
     const result = await pool.query(
       'SELECT upi_id, holder_name, is_verified FROM mentor_upi_details WHERE mentor_id = $1',
@@ -794,12 +776,8 @@ app.get('/api/mentor/:mentorId/upi', async (req, res) => {
 // Save/Update mentor UPI details
 app.post('/api/mentor/:mentorId/upi', async (req, res) => {
   // Add CORS headers
-  const origin = req.headers.origin;
-  const allowedOrigins = getAllowedOrigins();
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
+  res.header('Access-Control-Allow-Credentials', 'true');
   
   try {
     const { mentorId } = req.params;
@@ -814,20 +792,6 @@ app.post('/api/mentor/:mentorId/upi', async (req, res) => {
     if (!upiRegex.test(upi_id.trim())) {
       return res.status(400).json({ error: 'Invalid UPI ID format' });
     }
-    
-    // Ensure UPI table exists
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS mentor_upi_details (
-        id SERIAL PRIMARY KEY,
-        mentor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        upi_id VARCHAR(255) NOT NULL,
-        holder_name VARCHAR(255),
-        is_verified BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(mentor_id)
-      )
-    `);
     
     // Check if UPI details already exist
     const existing = await pool.query(
