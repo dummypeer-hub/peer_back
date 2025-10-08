@@ -960,8 +960,14 @@ app.post('/api/session-feedback', async (req, res) => {
     
     res.json({ message: 'Feedback submitted successfully' });
   } catch (error) {
-    console.error('Submit feedback error:', error);
-    res.status(500).json({ error: 'Server error: ' + error.message });
+    // Enhanced logging for debugging
+    console.error('Submit feedback error:', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack
+    });
+    res.status(500).json({ error: 'Server error: ' + (error?.message || '') });
   }
 });
 
