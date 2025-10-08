@@ -132,12 +132,19 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const [newMessage, setNewMessage] = useState('');
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
   const [sessionStarted, setSessionStarted] = useState(false);
+  
+  // NEW: Chat panel states
+  const [isChatMinimized, setIsChatMinimized] = useState(false);
 
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
   const dataChannelRef = useRef();
   const socketRef = useRef();
   const pcRef = useRef();
+  
+  // NEW: Chat panel refs
+  const chatPanelRef = useRef(null);
+  const isDraggingRef = useRef(false);
 
   const WEBRTC_CONFIG = {
     iceServers: [
@@ -176,6 +183,120 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       return () => clearInterval(timer);
     }
   }, [sessionStarted, timeLeft]);
+
+  // NEW: Drag functionality for chat panel
+  useEffect(() => {
+    const chatPanel = chatPanelRef.current;
+    const chatHeader = chatPanel?.querySelector('.chat-header');
+    
+    if (!chatPanel || !chatHeader) return;
+
+    let currentX = 0;
+    let currentY = 0;
+    let initialX = 0;
+    let initialY = 0;
+
+    const onMouseDown = (e) => {
+      // Only allow dragging from header, not from control buttons
+      if (e.target.closest('.chat-controls')) return;
+      
+      isDraggingRef.current = true;
+      
+      // Get current position
+      const rect = chatPanel.getBoundingClientRect();
+      initialX = e.clientX - rect.left;
+      initialY = e.clientY - rect.top;
+      
+      chatHeader.style.cursor = 'grabbing';
+      e.preventDefault();
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDraggingRef.current) return;
+      
+      e.preventDefault();
+      
+      currentX = e.clientX - initialX;
+      currentY = e.clientY - initialY;
+      
+      // Keep within viewport bounds
+      const maxX = window.innerWidth - chatPanel.offsetWidth;
+      const maxY = window.innerHeight - chatPanel.offsetHeight - 100; // 100px for controls
+      
+      currentX = Math.max(0, Math.min(currentX, maxX));
+      currentY = Math.max(0, Math.min(currentY, maxY));
+      
+      chatPanel.style.left = currentX + 'px';
+      chatPanel.style.top = currentY + 'px';
+      chatPanel.style.right = 'auto';
+      chatPanel.style.transform = 'none';
+    };
+
+    const onMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        chatHeader.style.cursor = 'grab';
+      }
+    };
+
+    const onTouchStart = (e) => {
+      if (e.target.closest('.chat-controls')) return;
+      
+      isDraggingRef.current = true;
+      const touch = e.touches[0];
+      
+      const rect = chatPanel.getBoundingClientRect();
+      initialX = touch.clientX - rect.left;
+      initialY = touch.clientY - rect.top;
+      
+      e.preventDefault();
+    };
+
+    const onTouchMove = (e) => {
+      if (!isDraggingRef.current) return;
+      
+      e.preventDefault();
+      const touch = e.touches[0];
+      
+      currentX = touch.clientX - initialX;
+      currentY = touch.clientY - initialY;
+      
+      const maxX = window.innerWidth - chatPanel.offsetWidth;
+      const maxY = window.innerHeight - chatPanel.offsetHeight - 100;
+      
+      currentX = Math.max(0, Math.min(currentX, maxX));
+      currentY = Math.max(0, Math.min(currentY, maxY));
+      
+      chatPanel.style.left = currentX + 'px';
+      chatPanel.style.top = currentY + 'px';
+      chatPanel.style.right = 'auto';
+      chatPanel.style.transform = 'none';
+    };
+
+    const onTouchEnd = () => {
+      isDraggingRef.current = false;
+    };
+
+    // Add event listeners
+    chatHeader.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    
+    chatHeader.addEventListener('touchstart', onTouchStart, { passive: false });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd);
+
+    // Cleanup
+    return () => {
+      chatHeader.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      
+      chatHeader.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
 
   const initializeCall = async () => {
     try {
@@ -429,8 +550,6 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     }
   };
 
-
-
   const startSession = async () => {
     try {
       await axios.post(`${config.API_BASE_URL}/video-call/${callId}/start`, {
@@ -559,6 +678,11 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // NEW: Toggle chat minimize function
+  const toggleChatMinimize = () => {
+    setIsChatMinimized(!isChatMinimized);
+  };
+
   return (
     <div className="cloudflare-video-call">
       <div className="video-container">
@@ -566,7 +690,12 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
           <video ref={remoteVideoRef} autoPlay playsInline />
           {!remoteStream && (
             <div className="waiting-message">
-              Waiting for other participant...
+              <div className="waiting-icon">👥</div>
+              <div className="waiting-text">Waiting for other participant...</div>
+              <div className="connection-status">
+                <div className={`status-indicator ${isConnected ? 'connected' : 'connecting'}`}></div>
+                <span>{isConnected ? 'Connected' : 'Connecting...'}</span>
+              </div>
             </div>
           )}
           <ConnectionIndicator 
@@ -577,6 +706,12 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         
         <div className="local-video">
           <video ref={localVideoRef} autoPlay playsInline muted />
+          {isVideoOff && (
+            <div className="camera-off-overlay">
+              <div className="camera-off-icon">📹</div>
+              <span>Camera Off</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -591,6 +726,7 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
           <button 
             onClick={toggleMute}
             className={`control-btn ${isMuted ? 'muted' : ''}`}
+            data-tooltip={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? '🔇' : '🎤'}
           </button>
@@ -598,6 +734,7 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
           <button 
             onClick={toggleVideo}
             className={`control-btn ${isVideoOff ? 'video-off' : ''}`}
+            data-tooltip={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
           >
             {isVideoOff ? '📹' : '📷'}
           </button>
@@ -605,37 +742,67 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
           <button 
             onClick={toggleScreenShare}
             className={`control-btn ${isScreenSharing ? 'sharing' : ''}`}
+            data-tooltip={isScreenSharing ? 'Stop sharing' : 'Share screen'}
           >
             🖥️
           </button>
           
-          <button onClick={handleEndCall} className="control-btn end-call">
-            📞
+          <button 
+            onClick={handleEndCall} 
+            className="control-btn end-call"
+            data-tooltip="End call"
+          >
+            End Call
           </button>
         </div>
       </div>
 
-      <div className="chat-panel">
-        <div className="chat-messages">
-          {messages.map((msg, index) => (
-            <div key={index} className="chat-message">
-              <span className="sender">{msg.sender}:</span>
-              <span className="text">{msg.text}</span>
-              <span className="time">{msg.timestamp}</span>
-            </div>
-          ))}
+      {/* UPDATED: Chat Panel with drag and minimize functionality */}
+      <div 
+        ref={chatPanelRef}
+        className={`chat-panel ${isChatMinimized ? 'minimized' : ''}`}
+      >
+        <div className="chat-header">
+          <h3>Chat</h3>
+          <div className="chat-controls">
+            <button 
+              className="chat-control-btn" 
+              onClick={toggleChatMinimize}
+              title={isChatMinimized ? "Maximize" : "Minimize"}
+            >
+              {isChatMinimized ? '▢' : '−'}
+            </button>
+          </div>
         </div>
         
-        <div className="chat-input">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Type a message..."
-          />
-          <button onClick={sendMessage}>Send</button>
-        </div>
+        {!isChatMinimized && (
+          <>
+            <div className="chat-messages">
+              {messages.map((msg, index) => (
+                <div key={msg.id || index} className="chat-message">
+                  <div className="message-header">
+                    <span className="sender">{msg.sender}</span>
+                    <span className="time">{msg.timestamp}</span>
+                  </div>
+                  <div className="message-text">{msg.text}</div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="chat-input">
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                placeholder="Type a message..."
+              />
+              <button onClick={sendMessage} disabled={!newMessage.trim()}>
+                Send
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

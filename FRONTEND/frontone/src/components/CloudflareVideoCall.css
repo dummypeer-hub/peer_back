@@ -161,9 +161,9 @@
 .remote-video video {
   width: 100%;
   height: 100%;
-  object-fit: contain; /* Changed from cover to contain for proper aspect ratio */
+  object-fit: contain;
   object-position: center;
-  transform: none; /* Remove mirror effect for remote video */
+  transform: none; /* NO MIRROR for remote video */
   background: #202124;
   max-width: 100%;
   max-height: 100%;
@@ -173,9 +173,9 @@
 .remote-main-video {
   width: 100%;
   height: 100%;
-  object-fit: contain; /* Keep aspect ratio intact */
+  object-fit: contain;
   object-position: center;
-  transform: none;
+  transform: none; /* NO MIRROR for screen share */
   background: #000;
   max-width: 100%;
   max-height: 100%;
@@ -191,7 +191,7 @@
   border-radius: 8px;
   object-fit: cover;
   object-position: center;
-  transform: none; /* Remove mirror effect for remote pip video */
+  transform: none; /* NO MIRROR for remote pip */
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   border: 2px solid #3c4043;
@@ -268,7 +268,7 @@
   color: #9aa0a6;
 }
 
-/* Local Video - Self View */
+/* Local Video - Self View (MIRRORED) */
 .local-video {
   position: absolute;
   top: 20px;
@@ -297,7 +297,7 @@
   height: 100%;
   object-fit: cover;
   object-position: center;
-  transform: scaleX(-1);
+  transform: scaleX(-1); /* MIRROR only for local video */
 }
 
 /* Camera Off Overlay */
@@ -496,7 +496,7 @@
   transform: translateX(-50%) scale(1);
 }
 
-/* Chat Panel */
+/* Chat Panel - Draggable & Resizable */
 .chat-panel {
   position: absolute;
   right: 24px;
@@ -504,6 +504,9 @@
   transform: translateY(-50%);
   width: 360px;
   height: 480px;
+  min-width: 280px;
+  min-height: 300px;
+  max-width: 600px;
   max-height: calc(100vh - 180px);
   background: rgba(32, 33, 36, 0.95);
   backdrop-filter: blur(24px);
@@ -515,8 +518,11 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 10002;
   overflow: hidden;
+  resize: both;
+  cursor: default;
 }
 
+/* Chat Header - Draggable Handle */
 .chat-header {
   padding: 20px 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -525,12 +531,54 @@
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
+  cursor: move;
+  cursor: grab;
+  user-select: none;
+}
+
+.chat-header:active {
+  cursor: grabbing;
 }
 
 .chat-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 500;
+  color: #e8eaed;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header h3::before {
+  content: '⋮⋮';
+  font-size: 18px;
+  color: #9aa0a6;
+  letter-spacing: -2px;
+}
+
+.chat-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chat-control-btn {
+  background: transparent;
+  border: none;
+  color: #9aa0a6;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-control-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
   color: #e8eaed;
 }
 
@@ -657,6 +705,29 @@
   background: #5f6368;
 }
 
+/* Resize Handle Indicator */
+.chat-panel::after {
+  content: '⋰';
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* Chat Panel States */
+.chat-panel.minimized {
+  height: 56px;
+  resize: none;
+}
+
+.chat-panel.minimized .chat-messages,
+.chat-panel.minimized .chat-input {
+  display: none;
+}
+
 /* Participant Info Overlay */
 .connection-indicator {
   display: flex;
@@ -677,7 +748,7 @@
   }
   
   .remote-video video {
-    object-fit: contain; /* Maintain aspect ratio on mobile */
+    object-fit: contain;
   }
   
   .local-video {
@@ -705,6 +776,11 @@
     max-height: 35vh;
     transform: none;
     top: auto;
+    resize: vertical;
+  }
+  
+  .chat-header {
+    cursor: default;
   }
   
   .call-controls {
@@ -800,6 +876,7 @@
     height: 240px;
     max-height: 30vh;
     bottom: 140px;
+    min-height: 200px;
   }
   
   .waiting-icon {
@@ -834,6 +911,8 @@
     width: 300px;
     right: 12px;
     left: auto;
+    top: 12px;
+    transform: none;
   }
   
   .call-controls {
