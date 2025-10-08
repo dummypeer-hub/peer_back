@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import config from '../config';
 import { createPeerConnection, testConnectivity } from '../utils/webrtc';
 import ConnectionIndicator from './ConnectionIndicator';
+import '../utils/draggableChat';
 import './CloudflareVideoCall.css';
 
 // Singleton Socket Manager for multiple concurrent calls
