@@ -7,6 +7,8 @@ import './CloudflareVideoCall.css';
 const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
+  const [remoteCameraStream, setRemoteCameraStream] = useState(null);
+  const [remoteScreenStream, setRemoteScreenStream] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -19,7 +21,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   const [canToggleMedia, setCanToggleMedia] = useState(true);
 
   const localVideoRef = useRef();
-  const remoteVideoRef = useRef();
+  const remoteCameraRef = useRef();
+  const remoteScreenRef = useRef();
+  const remoteAudioRef = useRef();
+  const remoteAudioStreamRef = useRef(new MediaStream());
   const peerConnectionRef = useRef();
   const socketRef = useRef();
   const dataChannelRef = useRef();
@@ -100,7 +105,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         localStream.getTracks().forEach(track => track.stop());
       }
       
-      // Show permission dialog first
+      // Show permission dialog that requires camera + mic (viewer option removed)
       const userChoice = await new Promise((resolve) => {
         const dialog = document.createElement('div');
         dialog.className = 'media-permission-overlay';
@@ -109,49 +114,24 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
             <div class="permission-header">
               <div class="permission-icon-large">🎥</div>
               <h3>Join Meeting</h3>
-              <p>How would you like to join this video call?</p>
+              <p>Your camera and microphone will be turned ON for this meeting.</p>
             </div>
-            
-            <div class="permission-options">
-              <div class="permission-card" data-choice="true">
-                <div class="card-icon">📹</div>
-                <div class="card-content">
-                  <h4>Join with Camera & Mic</h4>
-                  <p>Full video call experience</p>
-                </div>
-                <div class="card-arrow">→</div>
-              </div>
-              
-              <div class="permission-card" data-choice="false">
-                <div class="card-icon">👁️</div>
-                <div class="card-content">
-                  <h4>Join as Viewer</h4>
-                  <p>Watch and chat only</p>
-                </div>
-                <div class="card-arrow">→</div>
-              </div>
-            </div>
-            
-            <div class="permission-note">
-              <small>💡 You can enable camera/microphone later during the call</small>
+            <div style="margin-top:18px; color:#444;">By joining you consent to share audio and video during this session.</div>
+            <div style="margin-top:20px; display:flex; gap:12px; justify-content:center;">
+              <button class="permission-join-btn">Join with Camera & Mic</button>
             </div>
           </div>
         `;
-        
         document.body.appendChild(dialog);
-        
-        dialog.querySelectorAll('.permission-card').forEach((card) => {
-          card.onclick = () => {
-            const choice = card.getAttribute('data-choice') === 'true';
-            document.body.removeChild(dialog);
-            resolve(choice);
-          };
-        });
+        dialog.querySelector('.permission-join-btn').onclick = () => {
+          document.body.removeChild(dialog);
+          resolve(true);
+        };
       });
-      
+
       let stream;
+      // Require camera+mic; abort if permission denied
       if (userChoice) {
-        // User wants camera/mic
         try {
           const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
           
@@ -173,15 +153,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           console.log('✅ Full media access successful');
         } catch (error) {
-          console.warn('Media access failed, joining without media:', error.message);
-          stream = new MediaStream();
+          console.error('Media access failed — camera & mic are required:', error);
+          alert('Camera and microphone access are required to join this meeting. Please allow permissions and reload.');
+          return; // abort initialization
         }
-      } else {
-        // User chose visitor mode
-        stream = new MediaStream();
-        setIsVisitorMode(true);
-        setCanToggleMedia(true);
-        console.log('✅ Joining as visitor (no media)');
       }
       
       setLocalStream(stream);
@@ -204,15 +179,49 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       // Add tracks
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      // Handle remote stream
+      // Handle remote tracks (audio and video), separate screen vs camera
       pc.ontrack = (event) => {
-        console.log('📺 Remote stream received');
-        const [stream] = event.streams;
-        setRemoteStream(stream);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream;
-          // Force aspect ratio for consistent display
-          remoteVideoRef.current.style.objectFit = 'cover';
+        const track = event.track;
+        try {
+          if (track.kind === 'audio') {
+            // aggregate remote audio tracks into a single audio element
+            try {
+              remoteAudioStreamRef.current.addTrack(track);
+              if (!remoteStream) setRemoteStream(remoteAudioStreamRef.current);
+              if (remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = remoteAudioStreamRef.current;
+                const p = remoteAudioRef.current.play();
+                if (p && p.catch) p.catch(e => console.warn('Remote audio play prevented:', e));
+              }
+            } catch (e) {
+              console.warn('Failed to attach remote audio track:', e);
+            }
+            return;
+          }
+
+          // Video track - detect screen vs camera
+          const settings = track.getSettings ? track.getSettings() : {};
+          const label = track.label || '';
+          let isScreen = false;
+          if (settings.displaySurface) {
+            isScreen = ['monitor', 'window', 'application'].includes(settings.displaySurface);
+          }
+          if (!isScreen && /screen|display|window/i.test(label)) isScreen = true;
+
+          const streamForTrack = new MediaStream([track]);
+          if (isScreen) {
+            setRemoteScreenStream(streamForTrack);
+            if (remoteScreenRef.current) remoteScreenRef.current.srcObject = streamForTrack;
+            if (!remoteStream) setRemoteStream(streamForTrack);
+          } else {
+            setRemoteCameraStream(streamForTrack);
+            if (remoteCameraRef.current) remoteCameraRef.current.srcObject = streamForTrack;
+            // if no screen is showing, show camera in main
+            if (!remoteScreenStream && remoteScreenRef.current) remoteScreenRef.current.srcObject = streamForTrack;
+            if (!remoteStream) setRemoteStream(streamForTrack);
+          }
+        } catch (err) {
+          console.warn('Error processing incoming track:', err);
         }
       };
 
@@ -733,13 +742,25 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
         });
         
         const videoTrack = screenStream.getVideoTracks()[0];
-        const sender = peerConnectionRef.current.getSenders().find(s => 
-          s.track && s.track.kind === 'video'
-        );
-        
-        if (sender) {
-          await sender.replaceTrack(videoTrack);
+        // Try to add as a separate sender first so camera remains published
+        let screenSender = null;
+        try {
+          screenSender = peerConnectionRef.current.addTrack(videoTrack, screenStream);
+        } catch (e) {
+          console.warn('addTrack failed for screen, will fallback to replaceTrack', e);
         }
+
+        // If addTrack didn't create a sender, fallback to replacing the existing video sender
+        if (!screenSender) {
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(videoTrack);
+            screenSender = sender;
+          }
+        }
+
+        // store reference so we can remove on stop
+        peerConnectionRef.current._screenSender = screenSender;
         
         videoTrack.onended = () => stopScreenShare();
         setIsScreenSharing(true);
@@ -752,15 +773,28 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
   };
 
   const stopScreenShare = async () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-      const sender = peerConnectionRef.current.getSenders().find(s => 
-        s.track && s.track.kind === 'video'
-      );
-      
-      if (sender && videoTrack) {
-        await sender.replaceTrack(videoTrack);
+    try {
+      const screenSender = peerConnectionRef.current && peerConnectionRef.current._screenSender;
+      if (screenSender) {
+        try {
+          // If we added a dedicated sender for screen, remove it
+          peerConnectionRef.current.removeTrack(screenSender);
+        } catch (e) {
+          console.warn('Failed to remove screen sender, will attempt to restore camera via replaceTrack', e);
+          // fallback: replace with camera track
+          if (localStream) {
+            const videoTrack = localStream.getVideoTracks()[0];
+            const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender && videoTrack) await sender.replaceTrack(videoTrack);
+          }
+        }
+      } else if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        const sender = peerConnectionRef.current.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && videoTrack) await sender.replaceTrack(videoTrack);
       }
+    } catch (err) {
+      console.warn('Error stopping screen share:', err);
     }
     setIsScreenSharing(false);
   };
@@ -875,7 +909,16 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
     <div className="cloudflare-video-call">
       <div className="video-container">
         <div className="remote-video">
-          <video ref={remoteVideoRef} autoPlay playsInline style={{ objectFit: 'cover' }} />
+            <div className="remote-video-container">
+              {/* Main remote display: prefers screen share when available */}
+              <video ref={remoteScreenRef} autoPlay playsInline className="remote-main-video" />
+
+              {/* Picture-in-picture: remote camera */}
+              <video ref={remoteCameraRef} autoPlay playsInline className="remote-pip-video" />
+
+              {/* Hidden audio element to ensure remote audio plays reliably */}
+              <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
+            </div>
           {!remoteStream && (
             <div className="waiting-message">
               <div className="waiting-icon">👥</div>
