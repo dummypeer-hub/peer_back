@@ -42,7 +42,10 @@
   height: 100%;
   object-fit: contain;
   object-position: center;
-  transform: none !important;
+  transform: scaleX(1) !important;
+  -webkit-transform: scaleX(1) !important;
+  -moz-transform: scaleX(1) !important;
+  -ms-transform: scaleX(1) !important;
   background: #202124;
   max-width: 100%;
   max-height: 100%;
@@ -73,11 +76,17 @@
   object-fit: cover;
   object-position: center;
   transform: scaleX(-1);
+  -webkit-transform: scaleX(-1);
+  -moz-transform: scaleX(-1);
+  -ms-transform: scaleX(-1);
 }
 
 /* NO MIRROR FOR SCREEN SHARING */
 .local-video.screen-sharing video {
-  transform: none !important;
+  transform: scaleX(1) !important;
+  -webkit-transform: scaleX(1) !important;
+  -moz-transform: scaleX(1) !important;
+  -ms-transform: scaleX(1) !important;
 }
 
 /* Waiting State */
@@ -388,21 +397,11 @@
   height: 20px;
   cursor: nwse-resize;
   z-index: 10;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 4px;
+  background: linear-gradient(-45deg, transparent 0%, transparent 30%, rgba(255,255,255,0.2) 30%, rgba(255,255,255,0.2) 35%, transparent 35%, transparent 65%, rgba(255,255,255,0.2) 65%, rgba(255,255,255,0.2) 70%, transparent 70%);
 }
 
-.resize-handle::after {
-  content: '⋰';
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.3);
-  line-height: 1;
-}
-
-.resize-handle:hover::after {
-  color: rgba(255, 255, 255, 0.5);
+.resize-handle:hover {
+  background: linear-gradient(-45deg, transparent 0%, transparent 30%, rgba(255,255,255,0.4) 30%, rgba(255,255,255,0.4) 35%, transparent 35%, transparent 65%, rgba(255,255,255,0.4) 65%, rgba(255,255,255,0.4) 70%, transparent 70%);
 }
 
 .chat-panel.minimized {
