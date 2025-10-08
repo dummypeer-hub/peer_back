@@ -157,7 +157,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           
           const constraints = {
             video: {
-              width: { ideal: 640, max: 1280 },
+              width: { ideal: 641, max: 1280 },
               height: { ideal: 480, max: 720 },
               aspectRatio: { ideal: 4/3, min: 1.2, max: 1.8 },
               frameRate: { ideal: 24, max: 30 },
