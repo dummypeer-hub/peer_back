@@ -148,25 +148,61 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Railway CORS fix - must be before other middleware
+// Enhanced CORS configuration for serverless
+const corsOptions = {
+  origin: [
+    'https://www.peerverse.in',
+    'https://peerverse.in',
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Origin',
+    'X-Requested-With',
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'Cache-Control'
+  ],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+
+// Manual CORS headers as backup
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://www.peerverse.in');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization');
+  const allowedOrigins = [
+    'https://www.peerverse.in',
+    'https://peerverse.in',
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ];
+  
+  const origin = req.headers.origin;
+  
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
   
   if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
+    res.status(200).end();
+    return;
   }
+  
+  next();
 });
-
-app.use(cors({
-  origin: 'https://www.peerverse.in',
-  credentials: true
-}));
 app.use(express.json({ limit: '10mb' }));
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
 app.use('/api/signup', limiter);
 app.use('/api/login', limiter);
 app.use('/api/forgot-password', limiter);

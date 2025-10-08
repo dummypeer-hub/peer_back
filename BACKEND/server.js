@@ -922,7 +922,31 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Railway CORS fix - must be before other middleware
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: [
+    'https://www.peerverse.in',
+    'https://peerverse.in',
+    'https://peerverse-final.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Origin',
+    'X-Requested-With',
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'Cache-Control'
+  ],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+
+// Manual CORS headers as backup
 app.use((req, res, next) => {
   const allowedOrigins = [
     'https://www.peerverse.in',
@@ -933,51 +957,25 @@ app.use((req, res, next) => {
   ];
   
   const origin = req.headers.origin;
-  console.log(`CORS Request: ${req.method} ${req.path} from origin: ${origin}`);
   
   if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    console.log(`CORS: Allowed origin ${origin}`);
-  } else {
-    console.log(`CORS: Origin ${origin} not in allowed list:`, allowedOrigins);
-    // Still allow requests without origin (like from Postman)
-    if (!origin) {
-      res.header('Access-Control-Allow-Origin', '*');
-    }
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
   
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
-  res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization,Cache-Control');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
   
   if (req.method === 'OPTIONS') {
-    console.log(`CORS: Handling OPTIONS preflight for ${req.path}`);
-    res.sendStatus(200);
-  } else {
-    next();
+    res.status(200).end();
+    return;
   }
+  
+  next();
 });
 
-app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'https://www.peerverse.in',
-      'https://peerverse.in', 
-      'https://peerverse-final.vercel.app',
-      'http://localhost:3000',
-      'http://localhost:3001'
-    ];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
-
 // Handle preflight requests
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Apply rate limiter only to auth routes
