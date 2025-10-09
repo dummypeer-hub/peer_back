@@ -1818,3 +1818,15 @@ select.form-control {
     transition-duration: 0.01ms !important;
   }
 }
+.close-chat-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 1.25rem;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.close-chat-btn:hover {
+  color: var(--color-error);
+}

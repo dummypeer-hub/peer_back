@@ -136,6 +136,7 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   
   // Chat panel states
   const [isChatMinimized, setIsChatMinimized] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
@@ -189,6 +190,7 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
 
   // Drag and Resize functionality for chat panel
   useEffect(() => {
+    if (!showChat) return;
     const chatPanel = chatPanelRef.current;
     const chatHeader = chatPanel?.querySelector('.chat-header');
     const resizeHandle = chatPanel?.querySelector('.resize-handle');
@@ -346,7 +348,7 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
       document.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('touchend', onTouchEnd);
     };
-  }, []);
+  }, [showChat]);
 
   const initializeCall = async () => {
     try {
@@ -794,6 +796,14 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
             🖥️
           </button>
           
+          <button
+            className="control-btn"
+            aria-label="Toggle chat"
+            onClick={() => setShowChat(prev => !prev)}
+          >
+            <span role="img" aria-hidden="true">💬</span>
+          </button>
+          
           <button 
             onClick={handleEndCall} 
             className="control-btn end-call"
@@ -804,22 +814,30 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
         </div>
       </div>
 
-      <div 
-        ref={chatPanelRef}
-        className={`chat-panel ${isChatMinimized ? 'minimized' : ''}`}
-      >
-        <div className="chat-header">
-          <h3>Chat</h3>
-          <div className="chat-controls">
-            <button 
-              className="chat-control-btn" 
-              onClick={toggleChatMinimize}
-              title={isChatMinimized ? "Maximize" : "Minimize"}
-            >
-              {isChatMinimized ? '▢' : '−'}
-            </button>
+      {showChat && (
+        <div 
+          ref={chatPanelRef}
+          className={`chat-panel ${isChatMinimized ? 'minimized' : ''}`}
+        >
+          <div className="chat-header">
+            <h3>Chat</h3>
+            <div className="chat-controls">
+              <button 
+                className="chat-control-btn" 
+                onClick={toggleChatMinimize}
+                title={isChatMinimized ? "Maximize" : "Minimize"}
+              >
+                {isChatMinimized ? '▢' : '−'}
+              </button>
+              <button
+                className="close-chat-btn"
+                aria-label="Close chat"
+                onClick={() => setShowChat(false)}
+              >
+                ×
+              </button>
+            </div>
           </div>
-        </div>
         
         {!isChatMinimized && (
           <>
@@ -851,7 +869,8 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
             <div className="resize-handle"></div>
           </>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
