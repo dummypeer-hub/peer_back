@@ -1802,7 +1802,7 @@ select.form-control {
   will-change: transform;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  -webkit-perspective: 1000px;
+  -webkit-perspective: 1001px;
   perspective: 1000px;
   /* Improve video quality rendering */
   image-rendering: optimizeQuality;
