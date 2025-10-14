@@ -7,7 +7,7 @@ import CommunityBrowser from './CommunityBrowser';
 import RobustWebRTCCall from './RobustWebRTCCall';
 import CallRequestModal from './CallRequestModal';
 import MenteeProfileEditor from './MenteeProfileEditor';
-
+import BookingRequestFlow from './BookingRequestFlow';
 
 import SessionsPanel from './SessionsPanel';
 import './MenteeDashboard.css';
@@ -273,6 +273,8 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [popularBlogs, setPopularBlogs] = useState([]);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackSession, setFeedbackSession] = useState(null);
+  const [showBookingFlow, setShowBookingFlow] = useState(false);
+  const [selectedMentorForBooking, setSelectedMentorForBooking] = useState(null);
 
   const mainInterests = [
     'PLACEMENT',
@@ -482,35 +484,18 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     }
   };
 
-  const handleCall = async (mentorId) => {
-    try {
-      console.log('📞 Initiating call to mentor:', mentorId);
-      console.log('👤 Mentee details:', { id: user.id, username: user.username, role: user.role });
-      
-      const channelName = `call_${Date.now()}_${user.id}_${mentorId}`;
-      console.log('📺 Channel name:', channelName);
-      
-      const requestData = {
-        menteeId: user.id,
-        mentorId,
-        channelName
-      };
-      console.log('📤 Sending request:', requestData);
-      console.log('🌐 API URL:', `${config.API_BASE_URL}/video-call/request`);
-      
-      const response = await axios.post(`${config.API_BASE_URL}/video-call/request`, requestData);
-      
-      console.log('✅ Call request response:', response.data);
-      console.log('🎉 Call request sent successfully!');
-      alert('Call request sent to mentor. Check Sessions tab to join when accepted.');
-    } catch (error) {
-      console.error('❌ Failed to initiate call:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      alert(`Failed to initiate call: ${error.response?.data?.error || error.message}`);
+  const handleCall = (mentorId) => {
+    const mentor = mentors.find(m => m.id === mentorId);
+    setSelectedMentorForBooking(mentor);
+    setShowBookingFlow(true);
+  };
+
+  const handleBookingComplete = ({ bookingId, status }) => {
+    setShowBookingFlow(false);
+    setSelectedMentorForBooking(null);
+    if (status === 'ready') {
+      alert('Payment successful! You can now join the session from the Sessions tab.');
+      setCurrentSection('sessions');
     }
   };
 
@@ -624,7 +609,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
         
         <div className="mentor-actions">
           <button onClick={(e) => { e.stopPropagation(); handleCall(mentor.id); }} className="action-btn call">
-            📞 Call
+            📞 Book Session
           </button>
           <button onClick={(e) => { e.stopPropagation(); handleMessage(mentor.id); }} className="action-btn message">
             💬 Message
@@ -1273,7 +1258,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
               
               <div className="mentor-actions-modal">
                 <button onClick={() => handleCall(selectedMentor.id)} className="action-btn-modal call">
-                  📞 Schedule Call
+                  📞 Book Session
                 </button>
                 <button onClick={() => handleMessage(selectedMentor.id)} className="action-btn-modal message">
                   💬 Send Message
@@ -1330,6 +1315,25 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 Submit Feedback
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Booking Flow Modal */}
+      {showBookingFlow && selectedMentorForBooking && (
+        <div className="booking-modal-overlay" onClick={() => setShowBookingFlow(false)}>
+          <div className="booking-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="close-modal" onClick={() => setShowBookingFlow(false)}>✕</button>
+            <div className="booking-header">
+              <h3>Book Session with {selectedMentorForBooking.name}</h3>
+              <p>Session Fee: ₹{selectedMentorForBooking.sessionFee || 500}</p>
+            </div>
+            <BookingRequestFlow
+              menteeId={user.id}
+              mentorId={selectedMentorForBooking.id}
+              sessionFee={selectedMentorForBooking.sessionFee || 500}
+              onComplete={handleBookingComplete}
+            />
           </div>
         </div>
       )}

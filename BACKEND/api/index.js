@@ -109,8 +109,82 @@ pool.connect(async (err, client, release) => {
         );
         
         CREATE INDEX IF NOT EXISTS idx_mentor_upi_mentor_id ON mentor_upi_details(mentor_id);
+        
+        -- Payment system tables
+        CREATE TABLE IF NOT EXISTS bookings (
+          id SERIAL PRIMARY KEY,
+          mentee_id INTEGER NOT NULL REFERENCES users(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          session_fee DECIMAL(10,2) NOT NULL,
+          scheduled_time TIMESTAMP,
+          payment_status VARCHAR(20) DEFAULT 'pending',
+          call_allowed BOOLEAN DEFAULT FALSE,
+          status VARCHAR(20) DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT NOW(),
+          accepted_at TIMESTAMP,
+          CONSTRAINT valid_booking_status CHECK (status IN ('pending', 'accepted', 'rejected', 'completed', 'cancelled'))
+        );
+        
+        CREATE TABLE IF NOT EXISTS payments (
+          id SERIAL PRIMARY KEY,
+          booking_id INTEGER NOT NULL REFERENCES bookings(id),
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          razorpay_order_id VARCHAR(255) UNIQUE,
+          razorpay_payment_id VARCHAR(255),
+          razorpay_signature VARCHAR(255),
+          amount DECIMAL(10,2) NOT NULL,
+          mentor_amount DECIMAL(10,2) NOT NULL,
+          platform_fee DECIMAL(10,2) NOT NULL,
+          status VARCHAR(20) DEFAULT 'created',
+          payment_response JSONB,
+          created_at TIMESTAMP DEFAULT NOW(),
+          paid_at TIMESTAMP,
+          failed_at TIMESTAMP,
+          CONSTRAINT valid_payment_status CHECK (status IN ('created', 'paid', 'failed', 'refunded'))
+        );
+        
+        CREATE TABLE IF NOT EXISTS mentor_payment_details (
+          id SERIAL PRIMARY KEY,
+          mentor_id INTEGER NOT NULL REFERENCES users(id) UNIQUE,
+          upi_id VARCHAR(255) NOT NULL,
+          bank_account_number VARCHAR(50),
+          ifsc_code VARCHAR(20),
+          account_holder_name VARCHAR(255),
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE TABLE IF NOT EXISTS payment_settlements (
+          id SERIAL PRIMARY KEY,
+          payment_id INTEGER NOT NULL REFERENCES payments(id),
+          mentor_id INTEGER NOT NULL REFERENCES users(id),
+          amount DECIMAL(10,2) NOT NULL,
+          settlement_status VARCHAR(20) DEFAULT 'pending',
+          settlement_method VARCHAR(20) DEFAULT 'upi',
+          settlement_response JSONB,
+          created_at TIMESTAMP DEFAULT NOW(),
+          settled_at TIMESTAMP,
+          CONSTRAINT valid_settlement_status CHECK (settlement_status IN ('pending', 'processing', 'completed', 'failed'))
+        );
+        
+        CREATE TABLE IF NOT EXISTS payment_webhooks (
+          id SERIAL PRIMARY KEY,
+          event_type VARCHAR(50) NOT NULL,
+          razorpay_payment_id VARCHAR(255),
+          razorpay_order_id VARCHAR(255),
+          payload JSONB NOT NULL,
+          processed BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_bookings_mentee ON bookings(mentee_id);
+        CREATE INDEX IF NOT EXISTS idx_bookings_mentor ON bookings(mentor_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_booking ON payments(booking_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(razorpay_order_id);
+        CREATE INDEX IF NOT EXISTS idx_settlements_mentor ON payment_settlements(mentor_id);
       `);
-      console.log('Feedback tables created/verified successfully');
+      console.log('All database tables created/verified successfully');
     } catch (tableError) {
       console.error('Error creating feedback tables:', tableError);
     }

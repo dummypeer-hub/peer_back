@@ -8,6 +8,7 @@ import NotificationPanel from './NotificationPanel';
 import CommunitySection from './CommunitySection';
 import SessionsPanel from './SessionsPanel';
 import RobustWebRTCCall from './RobustWebRTCCall';
+import MentorBookingRequests from './MentorBookingRequests';
 
 import './MentorDashboard.css';
 import './LogoStyles.css';
@@ -303,10 +304,13 @@ const MentorDashboard = ({ user, onLogout }) => {
   );
 
   const renderSessions = () => (
-    <SessionsPanel 
-      user={user} 
-      onJoinSession={handleJoinSession}
-    />
+    <div className="sessions-content">
+      <MentorBookingRequests mentorId={user.id} />
+      <SessionsPanel 
+        user={user} 
+        onJoinSession={handleJoinSession}
+      />
+    </div>
   );
 
   const renderBlogs = () => {
