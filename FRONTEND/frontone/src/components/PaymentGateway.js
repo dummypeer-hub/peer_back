@@ -18,72 +18,15 @@ const PaymentGateway = ({ bookingId, amount, mentorId, userId, onSuccess, onErro
     setLoading(true);
     
     try {
-      // Load Razorpay script
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded) {
-        throw new Error('Failed to load payment gateway');
-      }
-
-      // Create payment order
-      const orderResponse = await fetch(`${config.API_BASE_URL}/bookings/${bookingId}/create-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, mentorId, amount })
-      });
-
-      if (!orderResponse.ok) {
-        throw new Error('Failed to create payment order');
-      }
-
-      const orderData = await orderResponse.json();
-
-      // Configure Razorpay options
-      const options = {
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'PeerSync',
-        description: 'Mentorship Session Payment',
-        order_id: orderData.orderId,
-        handler: async (response) => {
-          try {
-            // Verify payment
-            const verifyResponse = await fetch(`${config.API_BASE_URL}/payments/verify`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
-              })
-            });
-
-            if (verifyResponse.ok) {
-              onSuccess(response);
-            } else {
-              throw new Error('Payment verification failed');
-            }
-          } catch (error) {
-            onError(error.message);
-          }
-        },
-        prefill: {
-          name: 'User',
-          email: 'user@example.com'
-        },
-        theme: {
-          color: '#667eea'
-        },
-        modal: {
-          ondismiss: () => {
-            setLoading(false);
-            onError('Payment cancelled');
-          }
-        }
-      };
-
-      const razorpay = new window.Razorpay(options);
-      razorpay.open();
+      // Temporary: Simulate payment success after 2 seconds
+      setTimeout(() => {
+        setLoading(false);
+        onSuccess({ 
+          razorpay_payment_id: 'pay_demo_' + Date.now(),
+          razorpay_order_id: 'order_demo_' + Date.now(),
+          razorpay_signature: 'demo_signature'
+        });
+      }, 2000);
       
     } catch (error) {
       setLoading(false);

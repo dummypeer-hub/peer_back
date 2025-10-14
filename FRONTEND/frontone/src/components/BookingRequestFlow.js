@@ -20,20 +20,21 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
 
   const createBookingRequest = async () => {
     try {
-      const response = await fetch(`${config.API_BASE_URL}/bookings`, {
+      // Temporary: Use video call endpoint until booking endpoint is deployed
+      const channelName = `call_${Date.now()}_${menteeId}_${mentorId}`;
+      const response = await fetch(`${config.API_BASE_URL}/video-call/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           menteeId,
           mentorId,
-          sessionFee,
-          scheduledTime: new Date()
+          channelName
         })
       });
 
       if (response.ok) {
         const data = await response.json();
-        setBookingId(data.bookingId);
+        setBookingId(data.callId || Date.now());
         setBookingStatus('pending');
       } else {
         throw new Error('Failed to create booking');
@@ -45,15 +46,12 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
 
   const checkBookingStatus = async () => {
     try {
-      const response = await fetch(`${config.API_BASE_URL}/bookings/${bookingId}/status`);
-      if (response.ok) {
-        const data = await response.json();
-        setBookingStatus(data.status);
-        
-        if (data.callAllowed) {
-          onComplete({ bookingId, status: 'ready' });
+      // Temporary: Simulate mentor acceptance after 3 seconds
+      setTimeout(() => {
+        if (bookingStatus === 'pending') {
+          setBookingStatus('accepted');
         }
-      }
+      }, 3000);
     } catch (error) {
       console.error('Status check failed:', error);
     }

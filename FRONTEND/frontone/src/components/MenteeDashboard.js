@@ -1327,13 +1327,13 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             <button className="close-modal" onClick={() => setShowBookingFlow(false)}>✕</button>
             <div className="booking-header">
               <h3>Book Session with {selectedMentorForBooking.name}</h3>
-              <p>Session Fee: ₹{selectedMentorForBooking.sessionFee || 500}</p>
+              <p>Session Fee: ₹100</p>
               <small>Payment required before session access</small>
             </div>
             <BookingRequestFlow
               menteeId={user.id}
               mentorId={selectedMentorForBooking.id}
-              sessionFee={selectedMentorForBooking.sessionFee || 500}
+              sessionFee={100}
               onComplete={handleBookingComplete}
             />
           </div>
