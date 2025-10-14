@@ -12,9 +12,12 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
   }, []);
 
   useEffect(() => {
-    if (bookingId && bookingStatus === 'accepted') {
-      const interval = setInterval(checkBookingStatus, 2000);
-      return () => clearInterval(interval);
+    if (bookingId && bookingStatus === 'pending') {
+      // Simulate mentor acceptance after 3 seconds
+      const timeout = setTimeout(() => {
+        setBookingStatus('accepted');
+      }, 3000);
+      return () => clearTimeout(timeout);
     }
   }, [bookingId, bookingStatus]);
 
@@ -44,18 +47,7 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
     }
   };
 
-  const checkBookingStatus = async () => {
-    try {
-      // Temporary: Simulate mentor acceptance after 3 seconds
-      setTimeout(() => {
-        if (bookingStatus === 'pending') {
-          setBookingStatus('accepted');
-        }
-      }, 3000);
-    } catch (error) {
-      console.error('Status check failed:', error);
-    }
-  };
+
 
   const handlePaymentSuccess = () => {
     setBookingStatus('paid');
