@@ -99,7 +99,7 @@ const PaymentGateway = ({ bookingId, amount, mentorId, userId, onSuccess, onErro
   return (
     <div className="payment-gateway">
       <div className="payment-details">
-        <h3>Session Payment</h3>
+        <h3>Sessions Payment</h3>
         <p>Amount: ₹{amount}</p>
         <p>Booking ID: {bookingId}</p>
       </div>
