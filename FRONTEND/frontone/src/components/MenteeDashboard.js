@@ -1,3 +1,4 @@
+// Payment Integration v2.0 - Force cache refresh
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../config';
@@ -1327,6 +1328,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             <div className="booking-header">
               <h3>Book Session with {selectedMentorForBooking.name}</h3>
               <p>Session Fee: ₹{selectedMentorForBooking.sessionFee || 500}</p>
+              <small>Payment required before session access</small>
             </div>
             <BookingRequestFlow
               menteeId={user.id}
