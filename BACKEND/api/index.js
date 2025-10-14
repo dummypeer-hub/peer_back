@@ -66,13 +66,21 @@ pool.connect(async (err, client, release) => {
           channel_name VARCHAR(255),
           webrtc_session_id VARCHAR(255),
           status VARCHAR(50) DEFAULT 'pending',
+          payment_confirmed BOOLEAN DEFAULT FALSE,
+          payment_id VARCHAR(255),
+          payment_amount DECIMAL(10,2),
           created_at TIMESTAMP DEFAULT NOW(),
           accepted_at TIMESTAMP,
           started_at TIMESTAMP,
           ended_at TIMESTAMP,
           duration_minutes INTEGER,
-          CONSTRAINT valid_status CHECK (status IN ('pending', 'accepted', 'rejected', 'active', 'completed', 'cancelled'))
+          CONSTRAINT valid_status CHECK (status IN ('pending', 'accepted', 'rejected', 'active', 'completed', 'cancelled', 'payment_confirmed'))
         );
+        
+        -- Add payment columns to existing table if they don't exist
+        ALTER TABLE video_calls ADD COLUMN IF NOT EXISTS payment_confirmed BOOLEAN DEFAULT FALSE;
+        ALTER TABLE video_calls ADD COLUMN IF NOT EXISTS payment_id VARCHAR(255);
+        ALTER TABLE video_calls ADD COLUMN IF NOT EXISTS payment_amount DECIMAL(10,2);
         
         CREATE TABLE IF NOT EXISTS session_feedback (
           id SERIAL PRIMARY KEY,
@@ -785,6 +793,52 @@ app.post('/api/video-call/:callId/start', (req, res) => {
 
 app.post('/api/video-call/:callId/end', (req, res) => {
   res.json({ message: 'Call ended' });
+});
+
+// Payment success endpoint
+app.post('/api/video-call/:callId/payment-success', async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const { razorpay_payment_id, razorpay_order_id, amount } = req.body;
+    
+    // Update call status to payment confirmed
+    await pool.query(
+      'UPDATE video_calls SET status = $1, payment_confirmed = TRUE, payment_id = $2, payment_amount = $3 WHERE id = $4',
+      ['payment_confirmed', razorpay_payment_id, amount, callId]
+    );
+    
+    res.json({ success: true, message: 'Payment confirmed' });
+  } catch (error) {
+    console.error('Payment confirmation error:', error);
+    res.status(500).json({ error: 'Failed to confirm payment' });
+  }
+});
+
+// Check payment status
+app.get('/api/video-call/:callId/payment-status', async (req, res) => {
+  try {
+    const { callId } = req.params;
+    
+    const result = await pool.query(
+      'SELECT status, payment_confirmed, payment_amount FROM video_calls WHERE id = $1',
+      [callId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Call not found' });
+    }
+    
+    const call = result.rows[0];
+    res.json({
+      status: call.status,
+      paymentConfirmed: call.payment_confirmed || false,
+      paymentAmount: call.payment_amount || 0,
+      canJoin: call.payment_confirmed === true
+    });
+  } catch (error) {
+    console.error('Payment status check error:', error);
+    res.status(500).json({ error: 'Failed to check payment status' });
+  }
 });
 
 // Get mentor feedback

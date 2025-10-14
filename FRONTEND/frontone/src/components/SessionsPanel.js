@@ -200,13 +200,28 @@ const SessionsPanel = ({ user, onJoinSession }) => {
     }
   };
 
-  const handleJoinSession = (callId, channelName) => {
+  const handleJoinSession = async (callId, channelName) => {
     console.log('SessionsPanel handleJoinSession called:', { callId, channelName, hasCallback: !!onJoinSession });
-    // Use onJoinSession callback to handle video call in same component
-    if (onJoinSession) {
-      onJoinSession(callId, channelName);
-    } else {
-      console.error('No onJoinSession callback provided to SessionsPanel');
+    
+    try {
+      // Check payment status before allowing join
+      const paymentResponse = await axios.get(`${config.API_BASE_URL}/video-call/${callId}/payment-status`);
+      const { canJoin, paymentConfirmed } = paymentResponse.data;
+      
+      if (!canJoin || !paymentConfirmed) {
+        alert('Payment is required before joining the session. Please complete payment first.');
+        return;
+      }
+      
+      // Use onJoinSession callback to handle video call in same component
+      if (onJoinSession) {
+        onJoinSession(callId, channelName);
+      } else {
+        console.error('No onJoinSession callback provided to SessionsPanel');
+      }
+    } catch (error) {
+      console.error('Error checking payment status:', error);
+      alert('Unable to verify payment status. Please try again.');
     }
   };
 
@@ -359,6 +374,16 @@ const SessionsPanel = ({ user, onJoinSession }) => {
                 )}
                 
                 {session.status === 'accepted' && !session.ended_at && (
+                  <button 
+                    onClick={() => handleJoinSession(session.id, session.channel_name)}
+                    className="join-btn primary"
+                  >
+                    <span className="btn-icon">🎥</span>
+                    <span className="btn-text">Join Meeting</span>
+                  </button>
+                )}
+                
+                {session.status === 'payment_confirmed' && !session.ended_at && (
                   <button 
                     onClick={() => handleJoinSession(session.id, session.channel_name)}
                     className="join-btn primary"
