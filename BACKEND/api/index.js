@@ -1359,6 +1359,77 @@ app.post('/api/session-feedback', validateBody(schemas.sessionFeedbackSchema), a
   }
 });
 
+// Payment success endpoint for video calls
+app.post('/api/video-call/:callId/payment-success', async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const { razorpay_payment_id, razorpay_order_id, amount } = req.body;
+    
+    // Update call status to payment confirmed
+    await pool.query(
+      'UPDATE video_calls SET status = $1, payment_confirmed = TRUE, payment_id = $2, payment_amount = $3 WHERE id = $4',
+      ['payment_confirmed', razorpay_payment_id, amount, callId]
+    );
+    
+    res.json({ success: true, message: 'Payment confirmed' });
+  } catch (error) {
+    console.error('Payment confirmation error:', error);
+    res.status(500).json({ error: 'Failed to confirm payment' });
+  }
+});
+
+// Check payment status
+app.get('/api/video-call/:callId/payment-status', async (req, res) => {
+  try {
+    const { callId } = req.params;
+    
+    const result = await pool.query(
+      'SELECT status, payment_confirmed, payment_amount FROM video_calls WHERE id = $1',
+      [callId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Call not found' });
+    }
+    
+    const call = result.rows[0];
+    res.json({
+      status: call.status,
+      paymentConfirmed: call.payment_confirmed || false,
+      paymentAmount: call.payment_amount || 0,
+      canJoin: call.payment_confirmed === true
+    });
+  } catch (error) {
+    console.error('Payment status check error:', error);
+    res.status(500).json({ error: 'Failed to check payment status' });
+  }
+});
+
+// Create Razorpay order
+app.post('/api/create-razorpay-order', async (req, res) => {
+  try {
+    const { amount, bookingId } = req.body;
+    
+    const options = {
+      amount: amount * 100, // Convert to paise
+      currency: 'INR',
+      receipt: `booking_${bookingId}_${Date.now()}`
+    };
+    
+    const order = await razorpay.orders.create(options);
+    
+    res.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_9WdKeLLOicjKNx'
+    });
+  } catch (error) {
+    console.error('Create Razorpay order error:', error);
+    res.status(500).json({ error: 'Failed to create payment order' });
+  }
+});
+
 // Catch all
 // Payout endpoints
 const { processPendingPayouts, getPayoutHistory } = require('./payouts');
