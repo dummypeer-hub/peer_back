@@ -18,59 +18,49 @@ const PaymentGateway = ({ bookingId, amount, mentorId, userId, onSuccess, onErro
     setLoading(true);
     
     try {
-      // Load Razorpay script
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded) {
-        throw new Error('Failed to load Razorpay');
+      // Simulate payment process with confirmation dialog
+      const confirmed = window.confirm(
+        `Complete payment of ₹${amount} for mentorship session?\n\n` +
+        `This is a demo payment system.\n` +
+        `Click OK to simulate successful payment.`
+      );
+      
+      if (!confirmed) {
+        setLoading(false);
+        onError('Payment cancelled');
+        return;
       }
-
-      // Create Razorpay order with test credentials
-      const options = {
-        key: 'rzp_test_9WdKeLLOicjKNx', // Test key
-        amount: amount * 100, // Convert to paise
-        currency: 'INR',
-        name: 'PeerVerse',
-        description: 'Mentorship Session Payment',
-        order_id: 'order_' + bookingId + '_' + Date.now(),
-        handler: async (response) => {
-          try {
-            // Store payment success in backend
-            await fetch(`${config.API_BASE_URL}/video-call/${bookingId}/payment-success`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature || 'demo_sig',
-                bookingId,
-                amount
-              })
+      
+      // Simulate payment processing delay
+      setTimeout(async () => {
+        try {
+          // Store payment success in backend
+          const response = await fetch(`${config.API_BASE_URL}/video-call/${bookingId}/payment-success`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpay_payment_id: 'pay_demo_' + Date.now(),
+              razorpay_order_id: 'order_demo_' + Date.now(),
+              razorpay_signature: 'demo_signature',
+              bookingId,
+              amount
+            })
+          });
+          
+          if (response.ok) {
+            setLoading(false);
+            onSuccess({
+              razorpay_payment_id: 'pay_demo_' + Date.now(),
+              razorpay_order_id: 'order_demo_' + Date.now()
             });
-            
-            setLoading(false);
-            onSuccess(response);
-          } catch (error) {
-            setLoading(false);
-            onError('Payment verification failed');
+          } else {
+            throw new Error('Payment verification failed');
           }
-        },
-        prefill: {
-          name: 'User',
-          email: 'user@example.com'
-        },
-        theme: {
-          color: '#667eea'
-        },
-        modal: {
-          ondismiss: () => {
-            setLoading(false);
-            onError('Payment cancelled');
-          }
+        } catch (error) {
+          setLoading(false);
+          onError('Payment verification failed');
         }
-      };
-
-      const razorpay = new window.Razorpay(options);
-      razorpay.open();
+      }, 2000);
       
     } catch (error) {
       setLoading(false);
