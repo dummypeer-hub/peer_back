@@ -8,6 +8,8 @@ const rateLimit = require('express-rate-limit');
 const axios = require('axios');
 const http = require('http');
 const { Server } = require('socket.io');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -134,6 +136,12 @@ const mailjet = require('node-mailjet').apiConnect(
   process.env.MAILJET_API_KEY,
   process.env.MAILJET_SECRET_KEY
 );
+
+// Razorpay configuration
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 // Validation middleware (Joi)
 const { validateBody, schemas } = require('./middleware/validate');
@@ -1067,6 +1075,91 @@ app.get('/api/turn-credentials', async (req, res) => {
 
 // Generate OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+// Create Razorpay order
+app.post('/api/create-razorpay-order', async (req, res) => {
+  try {
+    const { amount, bookingId } = req.body;
+    
+    const options = {
+      amount: amount * 100, // Convert to paise
+      currency: 'INR',
+      receipt: `booking_${bookingId}_${Date.now()}`
+    };
+    
+    const order = await razorpay.orders.create(options);
+    
+    res.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_9WdKeLLOicjKNx'
+    });
+  } catch (error) {
+    console.error('Create Razorpay order error:', error);
+    res.status(500).json({ error: 'Failed to create payment order' });
+  }
+});
+
+// Verify payment
+app.post('/api/payments/verify', async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    
+    // Verify signature
+    const body = razorpay_order_id + '|' + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+    
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Invalid payment signature' });
+    }
+    
+    res.json({ success: true, message: 'Payment verified successfully' });
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({ error: 'Payment verification failed' });
+  }
+});
+
+// Create booking (request-then-pay flow)
+app.post('/api/bookings', async (req, res) => {
+  try {
+    const { menteeId, mentorId, sessionFee, scheduledTime } = req.body;
+    
+    if (!menteeId || !mentorId || !sessionFee) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Create a simple booking record
+    const bookingId = Date.now();
+    
+    res.json({ bookingId, status: 'pending', requiresPayment: false });
+  } catch (error) {
+    console.error('Create booking error:', error);
+    res.status(500).json({ error: 'Failed to create booking' });
+  }
+});
+
+// Get booking status
+app.get('/api/bookings/:id/status', async (req, res) => {
+  try {
+    const { id: bookingId } = req.params;
+    
+    res.json({
+      bookingId,
+      status: 'accepted',
+      paymentStatus: 'pending',
+      callAllowed: false,
+      requiresPayment: true
+    });
+  } catch (error) {
+    console.error('Get booking status error:', error);
+    res.status(500).json({ error: 'Failed to get booking status' });
+  }
+});
 
 
 
@@ -3374,6 +3467,8 @@ io.on('connection', (socket) => {
     console.log(`📋 Active rooms:`, Array.from(io.sockets.adapter.rooms.keys()));
   });
 });
+
+
 
 // For Vercel serverless functions
 if (process.env.VERCEL !== '1') {

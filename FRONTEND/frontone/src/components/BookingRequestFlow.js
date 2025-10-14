@@ -13,31 +13,51 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
 
   useEffect(() => {
     if (bookingId && bookingStatus === 'pending') {
-      // Simulate mentor acceptance after 3 seconds
+      // Check booking status periodically
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch(`${config.API_BASE_URL}/bookings/${bookingId}/status`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'accepted') {
+              setBookingStatus('accepted');
+              clearInterval(interval);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking booking status:', error);
+        }
+      }, 2000);
+      
+      // Auto-accept after 5 seconds for demo
       const timeout = setTimeout(() => {
         setBookingStatus('accepted');
-      }, 3000);
-      return () => clearTimeout(timeout);
+        clearInterval(interval);
+      }, 5000);
+      
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      };
     }
   }, [bookingId, bookingStatus]);
 
   const createBookingRequest = async () => {
     try {
-      // Temporary: Use video call endpoint until booking endpoint is deployed
-      const channelName = `call_${Date.now()}_${menteeId}_${mentorId}`;
-      const response = await fetch(`${config.API_BASE_URL}/video-call/request`, {
+      const response = await fetch(`${config.API_BASE_URL}/bookings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           menteeId,
           mentorId,
-          channelName
+          sessionFee,
+          scheduledTime: new Date().toISOString()
         })
       });
 
       if (response.ok) {
         const data = await response.json();
-        setBookingId(data.callId || Date.now());
+        setBookingId(data.bookingId);
         setBookingStatus('pending');
       } else {
         throw new Error('Failed to create booking');

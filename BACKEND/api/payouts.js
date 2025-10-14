@@ -28,10 +28,10 @@ const processPendingPayouts = async (req, res) => {
         // For now, mark as completed for testing
         await pool.query(`
           UPDATE payment_settlements 
-          SET settlement_status = 'completed', settlement_completed_at = NOW(),
-              settlement_reference = $1
+          SET settlement_status = 'completed', settled_at = NOW(),
+              settlement_response = $1
           WHERE id = $2
-        `, [`UPI_${Date.now()}`, payout.id]);
+        `, [JSON.stringify({ reference: `UPI_${Date.now()}`, method: 'manual' }), payout.id]);
         
         results.push({
           mentorId: payout.mentor_id,

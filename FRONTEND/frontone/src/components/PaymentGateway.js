@@ -18,14 +18,13 @@ const PaymentGateway = ({ bookingId, amount, mentorId, userId, onSuccess, onErro
     setLoading(true);
     
     try {
-      
-      // Load Razorpay script and create order
+      // Load Razorpay script
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) {
         throw new Error('Failed to load Razorpay');
       }
 
-      // Create Razorpay order
+      // Create order via backend
       const orderResponse = await fetch(`${config.API_BASE_URL}/create-razorpay-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -38,29 +37,26 @@ const PaymentGateway = ({ bookingId, amount, mentorId, userId, onSuccess, onErro
 
       const orderData = await orderResponse.json();
 
-      // Configure Razorpay options
       const options = {
         key: orderData.keyId,
         amount: orderData.amount,
         currency: orderData.currency,
+        order_id: orderData.orderId,
         name: 'PeerVerse',
         description: 'Mentorship Session Payment',
-        order_id: orderData.orderId,
         handler: async (response) => {
           try {
-            // Store payment success in backend
-            const verifyResponse = await fetch(`${config.API_BASE_URL}/video-call/${bookingId}/payment-success`, {
+            // Verify payment
+            const verifyResponse = await fetch(`${config.API_BASE_URL}/payments/verify`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-                bookingId,
-                amount
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
               })
             });
-            
+
             if (verifyResponse.ok) {
               setLoading(false);
               onSuccess(response);
@@ -99,7 +95,7 @@ const PaymentGateway = ({ bookingId, amount, mentorId, userId, onSuccess, onErro
   return (
     <div className="payment-gateway">
       <div className="payment-details">
-        <h3>Sessions Payment</h3>
+        <h3>Session Payment</h3>
         <p>Amount: ₹{amount}</p>
         <p>Booking ID: {bookingId}</p>
       </div>
