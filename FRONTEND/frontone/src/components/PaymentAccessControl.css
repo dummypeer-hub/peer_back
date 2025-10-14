@@ -1,0 +1,64 @@
+/* Payment Access Control */
+.access-check,
+.access-denied {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  text-align: center;
+  padding: 32px;
+}
+
+.loading-spinner {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.denied-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.access-denied h3 {
+  color: #dc3545;
+  margin-bottom: 12px;
+  font-size: 24px;
+}
+
+.access-denied p {
+  color: #6c757d;
+  margin-bottom: 24px;
+  max-width: 400px;
+}
+
+.back-button {
+  padding: 12px 24px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.3s;
+}
+
+.back-button:hover {
+  background: #5a6fd8;
+}
+
+/* Mobile Portrait Responsive Design */
+@media (max-width: 480px) {
+  .access-check,
+  .access-denied {
+    padding: 16px;
+  }
+  
+  .denied-icon {
+    font-size: 48px;
+  }
+  
+  .access-denied h3 {
+    font-size: 20px;
+  }
+}

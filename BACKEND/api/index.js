@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const rateLimit = require('express-rate-limit');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -13,6 +15,12 @@ const { validateBody, schemas } = require('../middleware/validate');
 
 // Environment variables with fallbacks
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+
+// Razorpay configuration
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 // Database connection
 const pool = new Pool({
@@ -896,6 +904,251 @@ app.get('/api/video-calls/:userId', async (req, res) => {
   }
 });
 
+// Create payment order
+app.post('/api/bookings/:id/create-payment', async (req, res) => {
+  try {
+    const { id: bookingId } = req.params;
+    const { userId, mentorId, amount } = req.body;
+    
+    if (!userId || !mentorId || !amount) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const mentorAmount = (amount * 0.70).toFixed(2);
+    const platformFee = (amount * 0.30).toFixed(2);
+    
+    // Create Razorpay order
+    const options = {
+      amount: Math.round(amount * 100), // Convert to paise
+      currency: 'INR',
+      receipt: `booking_${bookingId}_${Date.now()}`
+    };
+    
+    const order = await razorpay.orders.create(options);
+    
+    // Store payment record
+    await pool.query(`
+      INSERT INTO payments (booking_id, user_id, mentor_id, razorpay_order_id, amount, mentor_amount, platform_fee, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'created')
+    `, [bookingId, userId, mentorId, order.id, amount, mentorAmount, platformFee]);
+    
+    res.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID
+    });
+  } catch (error) {
+    console.error('Create payment error:', error);
+    res.status(500).json({ error: 'Failed to create payment order' });
+  }
+});
+
+// Verify payment
+app.post('/api/payments/verify', async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    
+    // Verify signature
+    const body = razorpay_order_id + '|' + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+    
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Invalid payment signature' });
+    }
+    
+    // Update payment status
+    await pool.query(`
+      UPDATE payments 
+      SET razorpay_payment_id = $1, razorpay_signature = $2, status = 'paid', paid_at = NOW()
+      WHERE razorpay_order_id = $3
+    `, [razorpay_payment_id, razorpay_signature, razorpay_order_id]);
+    
+    // Enable call access
+    const paymentResult = await pool.query(
+      'SELECT booking_id FROM payments WHERE razorpay_order_id = $1',
+      [razorpay_order_id]
+    );
+    
+    if (paymentResult.rows.length > 0) {
+      await pool.query(
+        'UPDATE bookings SET payment_status = $1, call_allowed = TRUE WHERE id = $2',
+        ['paid', paymentResult.rows[0].booking_id]
+      );
+    }
+    
+    res.json({ success: true, message: 'Payment verified successfully' });
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({ error: 'Payment verification failed' });
+  }
+});
+
+// Check payment status
+app.get('/api/bookings/:id/payment-status', async (req, res) => {
+  try {
+    const { id: bookingId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT p.status, p.amount, b.call_allowed
+      FROM payments p
+      JOIN bookings b ON p.booking_id = b.id
+      WHERE p.booking_id = $1
+      ORDER BY p.created_at DESC
+      LIMIT 1
+    `, [bookingId]);
+    
+    if (result.rows.length === 0) {
+      return res.json({ paymentStatus: 'pending', callAllowed: false });
+    }
+    
+    const payment = result.rows[0];
+    res.json({
+      paymentStatus: payment.status,
+      callAllowed: payment.call_allowed,
+      amount: payment.amount
+    });
+  } catch (error) {
+    console.error('Payment status check error:', error);
+    res.status(500).json({ error: 'Failed to check payment status' });
+  }
+});
+
+// Razorpay webhook
+app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const body = req.body;
+    
+    // Verify webhook signature
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+      .update(body)
+      .digest('hex');
+    
+    if (signature !== expectedSignature) {
+      return res.status(400).json({ error: 'Invalid webhook signature' });
+    }
+    
+    const event = JSON.parse(body);
+    
+    // Log webhook
+    await pool.query(`
+      INSERT INTO payment_webhooks (event_type, razorpay_payment_id, razorpay_order_id, payload)
+      VALUES ($1, $2, $3, $4)
+    `, [
+      event.event,
+      event.payload?.payment?.entity?.id || event.payload?.order?.entity?.id,
+      event.payload?.payment?.entity?.order_id || event.payload?.order?.entity?.id,
+      event
+    ]);
+    
+    // Handle webhook events
+    switch (event.event) {
+      case 'payment.captured':
+        const orderId = event.payload.payment.entity.order_id;
+        await pool.query(`
+          UPDATE payments 
+          SET status = 'paid', paid_at = NOW(), payment_response = $1
+          WHERE razorpay_order_id = $2
+        `, [event.payload, orderId]);
+        
+        const paymentResult = await pool.query(
+          'SELECT booking_id FROM payments WHERE razorpay_order_id = $1',
+          [orderId]
+        );
+        
+        if (paymentResult.rows.length > 0) {
+          await pool.query(
+            'UPDATE bookings SET payment_status = $1, call_allowed = TRUE WHERE id = $2',
+            ['paid', paymentResult.rows[0].booking_id]
+          );
+          
+          // Initiate automatic payout to mentor
+          const paymentDetails = await pool.query(
+            'SELECT p.mentor_amount, p.mentor_id, mpd.upi_id FROM payments p JOIN mentor_payment_details mpd ON p.mentor_id = mpd.mentor_id WHERE p.razorpay_order_id = $1',
+            [orderId]
+          );
+          
+          if (paymentDetails.rows.length > 0) {
+            const { mentor_amount, mentor_id, upi_id } = paymentDetails.rows[0];
+            
+            // Create settlement record
+            await pool.query(`
+              INSERT INTO payment_settlements (payment_id, mentor_id, amount, settlement_status, settlement_method)
+              SELECT id, $1, $2, 'pending', 'upi' FROM payments WHERE razorpay_order_id = $3
+            `, [mentor_id, mentor_amount, orderId]);
+            
+            console.log(`Payout scheduled: ₹${mentor_amount} to UPI ${upi_id} for mentor ${mentor_id}`);
+          }
+        }
+        break;
+        
+      case 'payment.failed':
+        await pool.query(`
+          UPDATE payments 
+          SET status = 'failed', failed_at = NOW(), payment_response = $1
+          WHERE razorpay_order_id = $2
+        `, [event.payload, event.payload.payment.entity.order_id]);
+        break;
+        
+      case 'order.paid':
+        await pool.query(`
+          UPDATE payments 
+          SET status = 'paid', paid_at = NOW(), payment_response = $1
+          WHERE razorpay_order_id = $2
+        `, [event.payload, event.payload.order.entity.id]);
+        break;
+        
+      case 'refund.created':
+      case 'refund.processed':
+      case 'refund.failed':
+        await pool.query(`
+          UPDATE payments 
+          SET status = 'refunded', payment_response = $1
+          WHERE razorpay_payment_id = $2
+        `, [event.payload, event.payload.refund.entity.payment_id]);
+        break;
+        
+      case 'payment_link.paid':
+      case 'payment_link.expired':
+        // Handle payment link events if needed
+        break;
+    }
+    
+    res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// Save mentor payment details
+app.post('/api/mentors/payment-details', async (req, res) => {
+  try {
+    const { mentorId, upiId, bankAccount, ifscCode, accountHolder } = req.body;
+    
+    if (!mentorId || !upiId) {
+      return res.status(400).json({ error: 'Mentor ID and UPI ID are required' });
+    }
+    
+    await pool.query(`
+      INSERT INTO mentor_payment_details (mentor_id, upi_id, bank_account_number, ifsc_code, account_holder_name)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (mentor_id) DO UPDATE SET
+        upi_id = $2, bank_account_number = $3, ifsc_code = $4, account_holder_name = $5, updated_at = NOW()
+    `, [mentorId, upiId, bankAccount, ifscCode, accountHolder]);
+    
+    res.json({ message: 'Payment details saved successfully' });
+  } catch (error) {
+    console.error('Save payment details error:', error);
+    res.status(500).json({ error: 'Failed to save payment details' });
+  }
+});
+
 // Submit session feedback and update mentor rating
 app.post('/api/session-feedback', validateBody(schemas.sessionFeedbackSchema), async (req, res) => {
   try {
@@ -979,6 +1232,102 @@ app.post('/api/session-feedback', validateBody(schemas.sessionFeedbackSchema), a
 });
 
 // Catch all
+// Payout endpoints
+const { processPendingPayouts, getPayoutHistory } = require('./payouts');
+app.post('/api/admin/process-payouts', processPendingPayouts);
+app.get('/api/mentor/:mentorId/payouts', getPayoutHistory);
+
+// Create booking (request-then-pay flow)
+app.post('/api/bookings', async (req, res) => {
+  try {
+    const { menteeId, mentorId, sessionFee, scheduledTime } = req.body;
+    
+    if (!menteeId || !mentorId || !sessionFee) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const result = await pool.query(`
+      INSERT INTO bookings (mentee_id, mentor_id, session_fee, scheduled_time, payment_status, call_allowed, status)
+      VALUES ($1, $2, $3, $4, 'pending', FALSE, 'pending')
+      RETURNING id
+    `, [menteeId, mentorId, sessionFee, scheduledTime]);
+    
+    res.json({ bookingId: result.rows[0].id, status: 'pending', requiresPayment: false });
+  } catch (error) {
+    console.error('Create booking error:', error);
+    res.status(500).json({ error: 'Failed to create booking' });
+  }
+});
+
+// Mentor accepts booking
+app.post('/api/bookings/:id/accept', async (req, res) => {
+  try {
+    const { id: bookingId } = req.params;
+    const { mentorId } = req.body;
+    
+    await pool.query(`
+      UPDATE bookings 
+      SET status = 'accepted', accepted_at = NOW()
+      WHERE id = $1 AND mentor_id = $2
+    `, [bookingId, mentorId]);
+    
+    res.json({ message: 'Booking accepted, waiting for payment' });
+  } catch (error) {
+    console.error('Accept booking error:', error);
+    res.status(500).json({ error: 'Failed to accept booking' });
+  }
+});
+
+// Get mentor booking requests
+app.get('/api/mentor/:mentorId/booking-requests', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT b.*, u.username as mentee_name
+      FROM bookings b
+      JOIN users u ON b.mentee_id = u.id
+      WHERE b.mentor_id = $1 AND b.status IN ('pending', 'accepted')
+      ORDER BY b.created_at DESC
+    `, [mentorId]);
+    
+    res.json({ requests: result.rows });
+  } catch (error) {
+    console.error('Get booking requests error:', error);
+    res.status(500).json({ error: 'Failed to get booking requests' });
+  }
+});
+
+// Get booking status
+app.get('/api/bookings/:id/status', async (req, res) => {
+  try {
+    const { id: bookingId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT b.*, p.status as payment_status
+      FROM bookings b
+      LEFT JOIN payments p ON b.id = p.booking_id
+      WHERE b.id = $1
+    `, [bookingId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    
+    const booking = result.rows[0];
+    res.json({
+      bookingId: booking.id,
+      status: booking.status,
+      paymentStatus: booking.payment_status || 'pending',
+      callAllowed: booking.call_allowed,
+      requiresPayment: booking.status === 'accepted' && !booking.call_allowed
+    });
+  } catch (error) {
+    console.error('Get booking status error:', error);
+    res.status(500).json({ error: 'Failed to get booking status' });
+  }
+});
+
 app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });

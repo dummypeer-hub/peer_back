@@ -4,8 +4,10 @@ import { io } from 'socket.io-client';
 import config from '../config';
 import { createPeerConnection, testConnectivity } from '../utils/webrtc';
 import ConnectionIndicator from './ConnectionIndicator';
+import { checkCallAccess } from '../utils/paymentUtils';
 import '../utils/draggableChat';
 import './CloudflareVideoCall.css';
+import './PaymentAccessControl.css';
 
 // Singleton Socket Manager for multiple concurrent calls
 class SocketManager {
@@ -121,7 +123,7 @@ class SocketManager {
 
 const socketManager = new SocketManager();
 
-const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
+const CloudflareVideoCall = ({ callId, user, onEndCall, bookingId }) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [peerConnection, setPeerConnection] = useState(null);
@@ -133,6 +135,8 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const [newMessage, setNewMessage] = useState('');
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [callAccessAllowed, setCallAccessAllowed] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   
   // Chat panel states
   const [isChatMinimized, setIsChatMinimized] = useState(false);
@@ -167,11 +171,33 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   };
 
   useEffect(() => {
-    initializeCall();
+    checkPaymentAndInitialize();
     return () => {
       cleanup();
     };
   }, []);
+
+  const checkPaymentAndInitialize = async () => {
+    if (bookingId) {
+      try {
+        const hasAccess = await checkCallAccess(bookingId);
+        setCallAccessAllowed(hasAccess);
+        if (hasAccess) {
+          initializeCall();
+        }
+      } catch (error) {
+        console.error('Failed to check call access:', error);
+        setCallAccessAllowed(false);
+      } finally {
+        setCheckingAccess(false);
+      }
+    } else {
+      // No booking ID, allow call (for testing)
+      setCallAccessAllowed(true);
+      setCheckingAccess(false);
+      initializeCall();
+    }
+  };
 
   useEffect(() => {
     if (sessionStarted && timeLeft > 0) {
@@ -731,6 +757,32 @@ const CloudflareVideoCall = ({ callId, user, onEndCall }) => {
   const toggleChatMinimize = () => {
     setIsChatMinimized(!isChatMinimized);
   };
+
+  if (checkingAccess) {
+    return (
+      <div className="cloudflare-video-call">
+        <div className="access-check">
+          <div className="loading-spinner">⏳</div>
+          <p>Checking payment status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!callAccessAllowed) {
+    return (
+      <div className="cloudflare-video-call">
+        <div className="access-denied">
+          <div className="denied-icon">🚫</div>
+          <h3>Payment Required</h3>
+          <p>Please complete the payment to access this video call.</p>
+          <button onClick={onEndCall} className="back-button">
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="cloudflare-video-call">

@@ -17,6 +17,7 @@
     "jsonwebtoken": "^9.0.2",
     "node-mailjet": "^6.0.6",
     "pg": "^8.16.3",
+    "razorpay": "^2.9.2",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
