@@ -3639,6 +3639,7 @@ app.get('/api/video-calls/:userId', async (req, res) => {
     
     const result = await pool.query(`
       SELECT vc.id, vc.status, vc.created_at, vc.accepted_at, vc.started_at, vc.ended_at, vc.channel_name,
+             vc.payment_confirmed, vc.payment_amount, vc.payment_id,
              mentee.username as mentee_name,
              mentor.username as mentor_name
       FROM video_calls vc
@@ -3828,6 +3829,65 @@ app.get('/api/mentor/:mentorId/booking-requests', async (req, res) => {
   } catch (error) {
     console.error('Get mentor booking requests error:', error);
     res.status(500).json({ error: 'Failed to get booking requests' });
+  }
+});
+
+// Get payments history for a mentee
+app.get('/api/payments/mentee/:menteeId', async (req, res) => {
+  try {
+    const { menteeId } = req.params;
+    const result = await pool.query(`
+      SELECT p.id, p.booking_id, p.razorpay_order_id, p.razorpay_payment_id, p.amount, p.status, p.created_at, b.session_fee, b.scheduled_time, b.status as booking_status
+      FROM payments p
+      JOIN bookings b ON p.booking_id = b.id
+      WHERE p.user_id = $1
+      ORDER BY p.created_at DESC
+      LIMIT 100
+    `, [menteeId]);
+
+    res.json({ payments: result.rows });
+  } catch (error) {
+    console.error('Get mentee payments error:', error);
+    res.status(500).json({ error: 'Failed to get mentee payments' });
+  }
+});
+
+// Get payments history for a mentor
+app.get('/api/payments/mentor/:mentorId', async (req, res) => {
+  try {
+    const { mentorId } = req.params;
+    const result = await pool.query(`
+      SELECT p.id, p.booking_id, p.razorpay_order_id, p.razorpay_payment_id, p.amount, p.mentor_amount, p.platform_fee, p.status, p.created_at, b.mentee_id, b.session_fee, b.scheduled_time, b.status as booking_status
+      FROM payments p
+      JOIN bookings b ON p.booking_id = b.id
+      WHERE p.mentor_id = $1
+      ORDER BY p.created_at DESC
+      LIMIT 100
+    `, [mentorId]);
+
+    res.json({ payments: result.rows });
+  } catch (error) {
+    console.error('Get mentor payments error:', error);
+    res.status(500).json({ error: 'Failed to get mentor payments' });
+  }
+});
+
+// Get pending pay-requests for a mentee (accepted bookings that require payment)
+app.get('/api/mentee/:menteeId/pay-requests', async (req, res) => {
+  try {
+    const { menteeId } = req.params;
+    const result = await pool.query(`
+      SELECT b.id as booking_id, b.mentor_id, b.session_fee, b.scheduled_time, b.status, u.username as mentor_name
+      FROM bookings b
+      JOIN users u ON b.mentor_id = u.id
+      WHERE b.mentee_id = $1 AND b.status = 'accepted' AND (b.payment_status IS NULL OR b.payment_status != 'paid')
+      ORDER BY b.accepted_at DESC
+    `, [menteeId]);
+
+    res.json({ requests: result.rows });
+  } catch (error) {
+    console.error('Get mentee pay-requests error:', error);
+    res.status(500).json({ error: 'Failed to get pay requests' });
   }
 });
 

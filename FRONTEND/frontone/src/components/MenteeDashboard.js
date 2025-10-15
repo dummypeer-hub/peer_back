@@ -22,6 +22,9 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [mentors, setMentors] = useState([]);
   const [filteredMentors, setFilteredMentors] = useState([]);
   const [loading, setLoading] = useState(false);
+  // Payments
+  const [paymentsHistory, setPaymentsHistory] = useState([]);
+  const [payRequests, setPayRequests] = useState([]);
 
   const interestCategories = {
     placement: [
@@ -67,6 +70,38 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   useEffect(() => {
     loadMentors();
   }, []);
+
+  useEffect(() => {
+    if (currentSection === 'payments' && user?.id) {
+      loadPayments();
+      loadPayRequests();
+    }
+  }, [currentSection, user]);
+
+  // Load payments history and pending pay requests
+  const loadPayments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await axios.get(`${config.API_BASE_URL}/payments/mentee/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPaymentsHistory(resp.data.payments || []);
+    } catch (err) {
+      console.error('Failed to load payments history:', err);
+    }
+  };
+
+  const loadPayRequests = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await axios.get(`${config.API_BASE_URL}/mentee/${user.id}/pay-requests`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPayRequests(resp.data.requests || []);
+    } catch (err) {
+      console.error('Failed to load pay requests:', err);
+    }
+  };
 
   const loadMentors = async () => {
     setLoading(true);
@@ -701,7 +736,12 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             >
               Favorites
             </button>
-            <button className="nav-link">Wallet</button>
+            <button 
+              className={`nav-link ${currentSection === 'payments' ? 'active' : ''}`} 
+              onClick={() => setCurrentSection('payments')}
+            >
+              Payments
+            </button>
           </nav>
         </div>
         <div className="header-right">
@@ -929,6 +969,53 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             </div>
           </div>
         </>
+      )}
+
+      {currentSection === 'payments' && (
+        <div className="payments-page">
+          <div className="payments-header">
+            <h2>Payments</h2>
+            <p>View your payment history and pending pay requests for confirmed sessions.</p>
+          </div>
+
+          <div className="payments-grid">
+            <div className="payments-history">
+              <h3>Payment History</h3>
+              {paymentsHistory.length === 0 ? (
+                <p>No payments found</p>
+              ) : (
+                <ul className="payments-list">
+                  {paymentsHistory.map(p => (
+                    <li key={p.id} className="payment-item">
+                      <div><strong>Amount:</strong> ₹{p.amount}</div>
+                      <div><strong>Status:</strong> {p.status}</div>
+                      <div><strong>Booking:</strong> {p.booking_id}</div>
+                      <div><strong>Date:</strong> {new Date(p.created_at).toLocaleString()}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="payments-requests">
+              <h3>Pending Pay Requests</h3>
+              {payRequests.length === 0 ? (
+                <p>No pending payments</p>
+              ) : (
+                payRequests.map(r => (
+                  <div key={r.booking_id} className="pay-request-card">
+                    <div><strong>Mentor:</strong> {r.mentor_name}</div>
+                    <div><strong>Amount:</strong> ₹{r.session_fee}</div>
+                    <div><strong>Scheduled:</strong> {r.scheduled_time ? new Date(r.scheduled_time).toLocaleString() : 'Not scheduled'}</div>
+                    <div className="pay-request-actions">
+                      <button onClick={() => setCurrentSection('sessions')}>View Request</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {currentSection === 'mentors' && (

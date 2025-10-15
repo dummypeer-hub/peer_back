@@ -39,6 +39,7 @@ const MentorDashboard = ({ user, onLogout }) => {
   const [showUpiForm, setShowUpiForm] = useState(false);
   const [upiLoading, setUpiLoading] = useState(false);
   const [upiMessage, setUpiMessage] = useState('');
+  const [mentorPayments, setMentorPayments] = useState([]);
   
   // All function definitions before useEffect
   const handleJoinSession = (callId) => {
@@ -119,6 +120,18 @@ const MentorDashboard = ({ user, onLogout }) => {
       }
     } catch (error) {
       console.error('Failed to load UPI details:', error);
+    }
+  };
+
+  const loadMentorPayments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await axios.get(`${config.API_BASE_URL}/payments/mentor/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setMentorPayments(resp.data.payments || []);
+    } catch (err) {
+      console.error('Failed to load mentor payments:', err);
     }
   };
 
@@ -203,6 +216,7 @@ const MentorDashboard = ({ user, onLogout }) => {
       loadUpcomingSessions();
       loadFeedback();
       loadUpiDetails();
+      loadMentorPayments();
       
       const interval = setInterval(() => {
         loadNotifications();
@@ -422,6 +436,24 @@ const MentorDashboard = ({ user, onLogout }) => {
             </div>
           </div>
         )}
+
+      <div className="mentor-payments">
+        <h4>Recent Payments</h4>
+        {mentorPayments.length === 0 ? (
+          <p>No payments yet</p>
+        ) : (
+          <ul className="mentor-payments-list">
+            {mentorPayments.map(p => (
+              <li key={p.id} className="mentor-payment-item">
+                <div><strong>Amount:</strong> ₹{p.amount}</div>
+                <div><strong>Booking:</strong> {p.booking_id}</div>
+                <div><strong>Paid At:</strong> {p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</div>
+                <div><strong>Status:</strong> {p.status}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
         
         {upiMessage && (
           <div className={`message ${upiMessage.includes('success') ? 'success' : 'error'}`}>
