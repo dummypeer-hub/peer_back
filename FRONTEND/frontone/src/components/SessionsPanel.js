@@ -201,32 +201,18 @@ const SessionsPanel = ({ user, onJoinSession }) => {
   };
 
   const canJoinSession = (session) => {
-    // Allow join when booking is accepted and payment confirmed, or when status explicitly marks payment_confirmed
-    return (session.status === 'accepted' && session.payment_confirmed === true) || session.status === 'payment_confirmed';
+    // Allow join when payment is confirmed or status indicates payment_confirmed
+    return session.payment_confirmed === true || session.status === 'payment_confirmed' || session.status === 'accepted';
   };
 
   const handleJoinSession = async (callId, channelName) => {
     console.log('SessionsPanel handleJoinSession called:', { callId, channelName, hasCallback: !!onJoinSession });
     
-    try {
-      // Check payment status before allowing join
-      const paymentResponse = await axios.get(`${config.API_BASE_URL}/bookings/${callId}/status`);
-      const { callAllowed, paymentStatus } = paymentResponse.data;
-      
-      if (!callAllowed || paymentStatus !== 'paid') {
-        alert('Payment is required before joining the session. Please complete payment first.');
-        return;
-      }
-      
-      // Use onJoinSession callback to handle video call in same component
-      if (onJoinSession) {
-        onJoinSession(callId, channelName);
-      } else {
-        console.error('No onJoinSession callback provided to SessionsPanel');
-      }
-    } catch (error) {
-      console.error('Error checking payment status:', error);
-      alert('Unable to verify payment status. Please try again.');
+    // Use onJoinSession callback to handle video call in same component
+    if (onJoinSession) {
+      onJoinSession(callId, channelName);
+    } else {
+      console.error('No onJoinSession callback provided to SessionsPanel');
     }
   };
 

@@ -829,11 +829,13 @@ app.get('/api/video-call/:callId/payment-status', async (req, res) => {
     }
     
     const call = result.rows[0];
+    const paymentConfirmed = call.payment_confirmed === true || call.status === 'payment_confirmed';
+    
     res.json({
       status: call.status,
-      paymentConfirmed: call.payment_confirmed || false,
+      paymentConfirmed: paymentConfirmed,
       paymentAmount: call.payment_amount || 0,
-      canJoin: call.payment_confirmed === true
+      canJoin: paymentConfirmed
     });
   } catch (error) {
     console.error('Payment status check error:', error);
@@ -1075,12 +1077,16 @@ app.post('/api/bookings/:id/create-payment', async (req, res) => {
 // Verify payment
 app.post('/api/payments/verify', async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, callId } = req.body;
+    
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: 'Missing payment verification data' });
+    }
     
     // Verify signature
     const body = razorpay_order_id + '|' + razorpay_payment_id;
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'fallback-key')
       .update(body.toString())
       .digest('hex');
     
@@ -1088,14 +1094,14 @@ app.post('/api/payments/verify', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payment signature' });
     }
     
-    // Update payment status
+    // Update payment status in payments table
     await pool.query(`
       UPDATE payments 
       SET razorpay_payment_id = $1, razorpay_signature = $2, status = 'paid', paid_at = NOW()
       WHERE razorpay_order_id = $3
     `, [razorpay_payment_id, razorpay_signature, razorpay_order_id]);
     
-    // Enable call access
+    // Enable call access in bookings table
     const paymentResult = await pool.query(
       'SELECT booking_id FROM payments WHERE razorpay_order_id = $1',
       [razorpay_order_id]
@@ -1108,10 +1114,18 @@ app.post('/api/payments/verify', async (req, res) => {
       );
     }
     
+    // Also update video_calls table if callId is provided
+    if (callId) {
+      await pool.query(
+        'UPDATE video_calls SET status = $1, payment_confirmed = TRUE, payment_id = $2 WHERE id = $3',
+        ['payment_confirmed', razorpay_payment_id, callId]
+      );
+    }
+    
     res.json({ success: true, message: 'Payment verified successfully' });
   } catch (error) {
     console.error('Payment verification error:', error);
-    res.status(500).json({ error: 'Payment verification failed' });
+    res.status(500).json({ error: 'Payment verification failed: ' + error.message });
   }
 });
 
@@ -1359,51 +1373,7 @@ app.post('/api/session-feedback', validateBody(schemas.sessionFeedbackSchema), a
   }
 });
 
-// Payment success endpoint for video calls
-app.post('/api/video-call/:callId/payment-success', async (req, res) => {
-  try {
-    const { callId } = req.params;
-    const { razorpay_payment_id, razorpay_order_id, amount } = req.body;
-    
-    // Update call status to payment confirmed
-    await pool.query(
-      'UPDATE video_calls SET status = $1, payment_confirmed = TRUE, payment_id = $2, payment_amount = $3 WHERE id = $4',
-      ['payment_confirmed', razorpay_payment_id, amount, callId]
-    );
-    
-    res.json({ success: true, message: 'Payment confirmed' });
-  } catch (error) {
-    console.error('Payment confirmation error:', error);
-    res.status(500).json({ error: 'Failed to confirm payment' });
-  }
-});
 
-// Check payment status
-app.get('/api/video-call/:callId/payment-status', async (req, res) => {
-  try {
-    const { callId } = req.params;
-    
-    const result = await pool.query(
-      'SELECT status, payment_confirmed, payment_amount FROM video_calls WHERE id = $1',
-      [callId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Call not found' });
-    }
-    
-    const call = result.rows[0];
-    res.json({
-      status: call.status,
-      paymentConfirmed: call.payment_confirmed || false,
-      paymentAmount: call.payment_amount || 0,
-      canJoin: call.payment_confirmed === true
-    });
-  } catch (error) {
-    console.error('Payment status check error:', error);
-    res.status(500).json({ error: 'Failed to check payment status' });
-  }
-});
 
 // Create Razorpay order
 app.post('/api/create-razorpay-order', async (req, res) => {
