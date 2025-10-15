@@ -137,11 +137,32 @@ const mailjet = require('node-mailjet').apiConnect(
   process.env.MAILJET_SECRET_KEY
 );
 
-// Razorpay configuration
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Razorpay configuration with fallback handling
+let razorpay;
+try {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  
+  // Handle Railway environment variable boolean issue
+  const actualKeyId = keyId === 'true' || keyId === true ? 'rzp_test_RQcLsZjjR737Hz' : keyId;
+  const actualKeySecret = keySecret === 'true' || keySecret === true ? 'IPR4mpexvQsMQWwtF1x' : keySecret;
+  
+  console.log('Razorpay initialization:', {
+    originalKeyId: keyId,
+    originalKeySecret: keySecret,
+    actualKeyId: actualKeyId?.substring(0, 8),
+    actualKeySecretLength: actualKeySecret?.length
+  });
+  
+  razorpay = new Razorpay({
+    key_id: actualKeyId,
+    key_secret: actualKeySecret
+  });
+  
+  console.log('Razorpay initialized successfully');
+} catch (error) {
+  console.error('Razorpay initialization failed:', error);
+}
 
 // Validation middleware (Joi)
 const { validateBody, schemas } = require('./middleware/validate');
@@ -3748,7 +3769,7 @@ app.get('/api/mentor/:mentorId/booking-requests', async (req, res) => {
   }
 });
 
-// Payment status endpoint
+// Payment status endpoint (matches frontend expectation)
 app.get('/api/bookings/:id/payment-status', async (req, res) => {
   try {
     const bookingId = req.params.id;
@@ -3774,7 +3795,9 @@ app.get('/api/bookings/:id/payment-status', async (req, res) => {
       callAllowed,
       requiresPayment,
       paymentAmount: booking.payment_amount,
-      paymentId: booking.payment_id
+      paymentId: booking.payment_id,
+      canJoin: callAllowed,
+      paymentConfirmed: booking.payment_confirmed
     });
   } catch (error) {
     console.error('Get payment status error:', error);
@@ -3784,12 +3807,23 @@ app.get('/api/bookings/:id/payment-status', async (req, res) => {
 
 // Test environment variables endpoint
 app.get('/api/test-env', (req, res) => {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  
   res.json({
-    hasRazorpayKeys: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
-    keyIdLength: process.env.RAZORPAY_KEY_ID?.length,
-    keyStartsCorrect: process.env.RAZORPAY_KEY_ID?.startsWith('rzp_'),
-    secretLength: process.env.RAZORPAY_KEY_SECRET?.length,
-    keyIdFirst8: process.env.RAZORPAY_KEY_ID?.substring(0, 8)
+    hasRazorpayKeys: !!(keyId && keySecret),
+    keyIdType: typeof keyId,
+    keySecretType: typeof keySecret,
+    keyIdLength: keyId?.length,
+    keyStartsCorrect: keyId?.startsWith('rzp_'),
+    secretLength: keySecret?.length,
+    keyIdFirst8: keyId?.substring(0, 8),
+    keyIdValue: keyId === 'true' ? 'BOOLEAN_TRUE_DETECTED' : 'STRING_VALUE',
+    environmentCheck: {
+      nodeEnv: process.env.NODE_ENV,
+      port: process.env.PORT,
+      hasDatabase: !!process.env.DATABASE_URL
+    }
   });
 });
 
