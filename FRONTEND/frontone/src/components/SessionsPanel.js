@@ -201,7 +201,8 @@ const SessionsPanel = ({ user, onJoinSession }) => {
   };
 
   const canJoinSession = (session) => {
-    return session.status === 'accepted' && session.payment_confirmed === true;
+    // Allow join when booking is accepted and payment confirmed, or when status explicitly marks payment_confirmed
+    return (session.status === 'accepted' && session.payment_confirmed === true) || session.status === 'payment_confirmed';
   };
 
   const handleJoinSession = async (callId, channelName) => {
@@ -378,16 +379,6 @@ const SessionsPanel = ({ user, onJoinSession }) => {
                 )}
                 
                 {canJoinSession(session) && !session.ended_at && (
-                  <button 
-                    onClick={() => handleJoinSession(session.id, session.channel_name)}
-                    className="join-btn primary"
-                  >
-                    <span className="btn-icon">🎥</span>
-                    <span className="btn-text">Join Meeting</span>
-                  </button>
-                )}
-                
-                {session.status === 'payment_confirmed' && !session.ended_at && (
                   <button 
                     onClick={() => handleJoinSession(session.id, session.channel_name)}
                     className="join-btn primary"

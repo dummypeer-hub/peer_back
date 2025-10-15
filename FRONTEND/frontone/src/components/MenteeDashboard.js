@@ -740,7 +740,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             </button>
             <button 
               className={`nav-link ${currentSection === 'payments' ? 'active' : ''}`} 
-              onClick={() => setCurrentSection('payments')}
+              onClick={() => { setCurrentSection('payments'); loadPayments(); loadPayRequests(); }}
             >
               Payments
             </button>

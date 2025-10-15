@@ -439,6 +439,7 @@ const MentorDashboard = ({ user, onLogout }) => {
 
       <div className="mentor-payments">
         <h4>Recent Payments</h4>
+        <button className="refresh-payments-btn" onClick={loadMentorPayments}>🔄 Refresh</button>
         {mentorPayments.length === 0 ? (
           <p>No payments yet</p>
         ) : (
@@ -446,7 +447,10 @@ const MentorDashboard = ({ user, onLogout }) => {
             {mentorPayments.map(p => (
               <li key={p.id} className="mentor-payment-item">
                 <div><strong>Amount:</strong> ₹{p.amount}</div>
+                <div><strong>Mentor Share:</strong> ₹{p.mentor_amount ?? '—'}</div>
+                <div><strong>Platform Fee:</strong> ₹{p.platform_fee ?? '—'}</div>
                 <div><strong>Booking:</strong> {p.booking_id}</div>
+                <div><strong>Razorpay Payment ID:</strong> {p.razorpay_payment_id || p.razorpay_payment_id || '—'}</div>
                 <div><strong>Paid At:</strong> {p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</div>
                 <div><strong>Status:</strong> {p.status}</div>
               </li>
@@ -654,6 +658,14 @@ const MentorDashboard = ({ user, onLogout }) => {
       default: return renderHome();
     }
   };
+
+  // Ensure mentor payments are refreshed when wallet tab is selected
+  useEffect(() => {
+    if (activeTab === 'wallet') {
+      loadMentorPayments();
+      loadUpiDetails();
+    }
+  }, [activeTab]);
 
   return (
     <div className="mentor-dashboard">
