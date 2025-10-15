@@ -38,6 +38,18 @@ const SessionsPanel = ({ user, onJoinSession }) => {
       console.log(`✅ Room join confirmed:`, data);
     });
     
+    // Listen for payment events so UI refreshes immediately when payment completes
+    socketConnection.on('payment_success', (data) => {
+      console.log('💰 Received payment_success event:', data);
+      // small delay to let DB commit finish then refresh
+      setTimeout(() => loadSessions(), 500);
+    });
+
+    socketConnection.on('payment_received', (data) => {
+      console.log('💵 Received payment_received event:', data);
+      setTimeout(() => loadSessions(), 500);
+    });
+    
     if (user.role === 'mentor') {
       socketConnection.on('call_request', (data) => {
         console.log('📞 Mentor received call_request:', data);
@@ -201,18 +213,33 @@ const SessionsPanel = ({ user, onJoinSession }) => {
   };
 
   const canJoinSession = (session) => {
-    // Allow join when payment is confirmed or status indicates payment_confirmed
-    return session.payment_confirmed === true || session.status === 'payment_confirmed' || session.status === 'accepted';
+    // Allow join only when payment is confirmed or session is active or explicitly marked payment_confirmed
+    return session.payment_confirmed === true || session.status === 'payment_confirmed' || session.status === 'active';
   };
 
   const handleJoinSession = async (callId, channelName) => {
     console.log('SessionsPanel handleJoinSession called:', { callId, channelName, hasCallback: !!onJoinSession });
-    
-    // Use onJoinSession callback to handle video call in same component
-    if (onJoinSession) {
-      onJoinSession(callId, channelName);
-    } else {
-      console.error('No onJoinSession callback provided to SessionsPanel');
+    try {
+      // Double-check server-side that payment has been confirmed / call is allowed
+      const statusResp = await axios.get(`${config.API_BASE_URL}/bookings/${callId}/payment-status`);
+      const { callAllowed, paymentStatus } = statusResp.data || {};
+
+      if (!callAllowed && paymentStatus !== 'paid') {
+        alert('Payment is required before joining the session. Please complete payment first.');
+        // Refresh sessions in case status changed
+        loadSessions();
+        return;
+      }
+
+      // Proceed to join
+      if (onJoinSession) {
+        onJoinSession(callId, channelName);
+      } else {
+        console.error('No onJoinSession callback provided to SessionsPanel');
+      }
+    } catch (err) {
+      console.error('Error checking payment status before join:', err);
+      alert('Unable to verify payment status. Please try again.');
     }
   };
 
