@@ -1,50 +1,66 @@
 .community-browser {
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 40px 60px;
+  max-width: none;
+  margin: 0;
+  background: #FBF9F3;
+  min-height: 100vh;
 }
 
 .community-tabs {
   display: flex;
-  gap: 10px;
-  margin-bottom: 30px;
-  border-bottom: 1px solid #eee;
+  gap: 15px;
+  margin-bottom: 40px;
+  background: white;
+  padding: 30px 40px;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .tab-btn {
-  background: none;
-  border: none;
+  background: linear-gradient(135deg, #f8f9ff 0%, #e8ecff 100%);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(30, 64, 175, 0.4);
   padding: 12px 24px;
+  border-radius: 12px;
   cursor: pointer;
-  font-weight: 600;
-  color: #666;
-  border-bottom: 3px solid transparent;
-  transition: all 0.3s;
+  font-weight: 700;
+  color: #000000;
+  transition: all 0.3s ease;
 }
 
 .tab-btn.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
+  background: linear-gradient(135deg, #f8f9ff 0%, #e8ecff 100%);
+  border: 1px solid rgba(30, 64, 175, 0.6);
+  transform: translateY(-4px) scale(1.08);
 }
 
 .tab-btn:hover {
-  color: #667eea;
+  transform: translateY(-4px) scale(1.08);
+  box-shadow: 0 0 20px rgba(30, 64, 175, 1.0), 0 0 30px rgba(30, 64, 175, 0.6);
+  border: 1px solid rgba(30, 64, 175, 0.4);
 }
 
 .browse-communities h2,
 .joined-communities h2 {
-  color: #333;
-  margin-bottom: 20px;
+  color: #16123F;
+  margin-bottom: 30px;
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 .communities-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
+  gap: 30px;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .community-card {
-  background: white;
+  background: #DDD8D1;
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
@@ -53,8 +69,9 @@
 }
 
 .community-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+  transform: translateY(-8px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  border-color: #3b82f6;
 }
 
 .community-card.joined {
@@ -235,6 +252,76 @@
 .community-viewer-header .back-btn:hover {
   background: #e9ecef;
   color: #333;
+}
+
+/* Fix overlapping tab button borders */
+.tab-btn {
+  margin-right: 8px;
+}
+
+.tab-btn:last-child {
+  margin-right: 0;
+}
+
+/* Override all tab button sizing */
+.community-tabs .tab-btn {
+  flex: 1 !important;
+  width: auto !important;
+  min-width: auto !important;
+  max-width: none !important;
+}
+
+/* Keep active button styling, remove inactive button styling */
+.tab-btn.active {
+  background: linear-gradient(135deg, #f8f9ff 0%, #e8ecff 100%) !important;
+  border: 1px solid rgba(30, 64, 175, 0.6) !important;
+}
+
+/* Add border to Browse Communities button */
+.tab-btn:not(.active) {
+  border: 1px solid rgba(30, 64, 175, 0.4) !important;
+}
+
+/* Shift Browse Communities button to right */
+.tab-btn:not(.active) {
+  margin-left: 16px !important;
+}
+
+/* Increase upward shift for Browse Communities button */
+.tab-btn:not(.active) {
+  margin-top: -4px !important;
+}
+
+/* Add light blue background to Browse Communities button */
+.tab-btn:not(.active) {
+  background: linear-gradient(135deg, #f8f9ff 0%, #e8ecff 100%) !important;
+  backdrop-filter: blur(15px) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
+}
+
+/* Make Browse Communities button text black */
+.tab-btn:not(.active) {
+  color: #000000 !important;
+}
+
+/* Shift My Communities button left when Browse Communities is active */
+.tab-btn.active:first-child {
+  margin-right: 16px !important;
+}
+
+/* Remove popup effect from active tab button */
+.tab-btn.active {
+  transform: none !important;
+}
+
+/* Remove white container from community sections */
+.browse-communities,
+.joined-communities {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 @media (max-width: 768px) {
