@@ -26,6 +26,9 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const [paymentsHistory, setPaymentsHistory] = useState([]);
   const [payRequests, setPayRequests] = useState([]);
 
+  // Current UI section (moved up so useEffect can reference it without TDZ)
+  const [currentSection, setCurrentSection] = useState('home');
+
   const interestCategories = {
     placement: [
       'DSA', 'Frontend Development', 'Backend Development', 'Full Stack', 'Mobile Development',
@@ -275,7 +278,6 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   };
 
   const [favorites, setFavorites] = useState([]);
-  const [currentSection, setCurrentSection] = useState('home');
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedMentor, setSelectedMentor] = useState(null);
