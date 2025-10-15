@@ -22,6 +22,9 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
             if (data.status === 'accepted') {
               setBookingStatus('accepted');
               clearInterval(interval);
+            } else if (data.status === 'rejected') {
+              setBookingStatus('rejected');
+              clearInterval(interval);
             }
           }
         } catch (error) {
@@ -29,15 +32,8 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
         }
       }, 2000);
       
-      // Auto-accept after 5 seconds for demo
-      const timeout = setTimeout(() => {
-        setBookingStatus('accepted');
-        clearInterval(interval);
-      }, 5000);
-      
       return () => {
         clearInterval(interval);
-        clearTimeout(timeout);
       };
     }
   }, [bookingId, bookingStatus]);
@@ -126,10 +122,101 @@ const BookingRequestFlow = ({ menteeId, mentorId, sessionFee, onComplete }) => {
     );
   }
 
+  if (bookingStatus === 'rejected') {
+    return (
+      <div className="booking-status">
+        <div className="rejected-icon">❌</div>
+        <h3>Request Declined</h3>
+        <p>The mentor has declined your session request.</p>
+        <button onClick={() => window.location.reload()} className="retry-btn">
+          Try Another Mentor
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="booking-status">
       <div className="spinner">⏳</div>
       <p>Processing...</p>
+      
+      <style jsx>{`
+        .booking-status {
+          text-align: center;
+          padding: 40px 20px;
+          background: #f8f9fa;
+          border-radius: 12px;
+          margin: 20px 0;
+        }
+        
+        .spinner {
+          font-size: 32px;
+          margin-bottom: 16px;
+          animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        .waiting-icon, .payment-icon, .rejected-icon {
+          font-size: 48px;
+          margin-bottom: 16px;
+        }
+        
+        .booking-details {
+          background: white;
+          padding: 16px;
+          border-radius: 8px;
+          margin: 16px 0;
+          border: 1px solid #dee2e6;
+        }
+        
+        .booking-details p {
+          margin: 8px 0;
+          color: #6c757d;
+        }
+        
+        .payment-required {
+          text-align: center;
+          padding: 20px;
+        }
+        
+        .payment-required h3 {
+          color: #28a745;
+          margin-bottom: 12px;
+        }
+        
+        .retry-btn {
+          background: #007bff;
+          color: white;
+          border: none;
+          padding: 12px 24px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 16px;
+          margin-top: 16px;
+        }
+        
+        .retry-btn:hover {
+          background: #0056b3;
+        }
+        
+        .booking-error {
+          text-align: center;
+          padding: 40px 20px;
+          background: #f8d7da;
+          border: 1px solid #f5c6cb;
+          border-radius: 12px;
+          color: #721c24;
+        }
+        
+        .booking-error h3 {
+          color: #721c24;
+          margin-bottom: 12px;
+        }
+      `}</style>
     </div>
   );
 };

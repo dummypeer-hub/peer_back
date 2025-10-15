@@ -305,7 +305,7 @@ const MentorDashboard = ({ user, onLogout }) => {
 
   const renderSessions = () => (
     <div className="sessions-content">
-      <MentorBookingRequests mentorId={user.id} />
+      <MentorBookingRequests user={user} />
       <SessionsPanel 
         user={user} 
         onJoinSession={handleJoinSession}
