@@ -11,7 +11,7 @@ const PaymentStatus = ({ bookingId, onStatusChange }) => {
 
   const checkPaymentStatus = async () => {
     try {
-      const response = await fetch(`${config.API_BASE_URL}/bookings/${bookingId}/payment-status`);
+      const response = await fetch(`${config.API_BASE_URL}/bookings/${bookingId}/status`);
       if (response.ok) {
         const data = await response.json();
         setStatus(data);

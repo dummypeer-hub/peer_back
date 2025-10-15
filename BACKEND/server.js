@@ -289,7 +289,12 @@ pool.connect(async (err, client, release) => {
         ALTER TABLE video_calls ADD COLUMN IF NOT EXISTS payment_amount DECIMAL(10,2) DEFAULT 0;
         
         -- Make channel_name nullable for bookings
-        ALTER TABLE video_calls ALTER COLUMN channel_name DROP NOT NULL;
+        DO $$ 
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'video_calls' AND column_name = 'channel_name' AND is_nullable = 'NO') THEN
+            ALTER TABLE video_calls ALTER COLUMN channel_name DROP NOT NULL;
+          END IF;
+        END $$;
         
         CREATE TABLE IF NOT EXISTS webrtc_sessions (
           id SERIAL PRIMARY KEY,
@@ -1109,6 +1114,9 @@ app.post('/api/create-razorpay-order', async (req, res) => {
     };
     
     console.log('Creating Razorpay order with options:', options);
+    console.log('Razorpay instance:', !!razorpay);
+    console.log('Razorpay credentials:', { keyId: !!process.env.RAZORPAY_KEY_ID, keySecret: !!process.env.RAZORPAY_KEY_SECRET });
+    
     const order = await razorpay.orders.create(options);
     console.log('Razorpay order created:', order.id);
     
@@ -1142,52 +1150,66 @@ app.post('/api/payments/verify', async (req, res) => {
     
     // Update booking payment status if bookingId is provided
     if (bookingId) {
-      await pool.query(
-        'UPDATE video_calls SET payment_confirmed = $1, payment_id = $2 WHERE id = $3',
-        [true, razorpay_payment_id, bookingId]
-      );
-      
-      // Get booking details for notifications
-      const booking = await pool.query(
-        'SELECT mentee_id, mentor_id, payment_amount FROM video_calls WHERE id = $1',
-        [bookingId]
-      );
-      
-      if (booking.rows.length > 0) {
-        const { mentee_id, mentor_id, payment_amount } = booking.rows[0];
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
         
-        // Add earnings for mentor (70% of payment)
-        const mentorEarning = (payment_amount * 0.7).toFixed(2);
-        await pool.query(
-          'INSERT INTO mentor_earnings (mentor_id, session_id, amount, type) VALUES ($1, $2, $3, $4)',
-          [mentor_id, bookingId, mentorEarning, 'session']
+        // Update payment status
+        await client.query(
+          'UPDATE video_calls SET payment_confirmed = $1, payment_id = $2 WHERE id = $3',
+          [true, razorpay_payment_id, bookingId]
         );
         
-        // Create notifications
-        await pool.query(
-          'INSERT INTO notifications (user_id, type, title, message, related_id, related_type) VALUES ($1, $2, $3, $4, $5, $6)',
-          [mentee_id, 'payment_success', 'Payment Successful', 'Your payment has been confirmed. You can now join the session.', bookingId, 'booking']
+        // Get booking details
+        const booking = await client.query(
+          'SELECT mentee_id, mentor_id, payment_amount FROM video_calls WHERE id = $1',
+          [bookingId]
         );
         
-        await pool.query(
-          'INSERT INTO notifications (user_id, type, title, message, related_id, related_type) VALUES ($1, $2, $3, $4, $5, $6)',
-          [mentor_id, 'payment_received', 'Payment Received', `Payment of ₹${payment_amount} received for your session. You earned ₹${mentorEarning}.`, bookingId, 'booking']
-        );
-        
-        // Send real-time notifications
-        if (io) {
-          io.to(`user_${mentee_id}`).emit('payment_success', {
-            bookingId,
-            message: 'Payment successful! You can now join the session.'
-          });
+        if (booking.rows.length > 0) {
+          const { mentee_id, mentor_id, payment_amount } = booking.rows[0];
           
-          io.to(`user_${mentor_id}`).emit('payment_received', {
-            bookingId,
-            amount: payment_amount,
-            earning: mentorEarning,
-            message: `Payment received for your session.`
-          });
+          // Add earnings for mentor using environment variable
+          const mentorSharePercentage = process.env.MENTOR_SHARE_PERCENTAGE || 70;
+          const mentorEarning = (payment_amount * (mentorSharePercentage / 100)).toFixed(2);
+          await client.query(
+            'INSERT INTO mentor_earnings (mentor_id, session_id, amount, type) VALUES ($1, $2, $3, $4)',
+            [mentor_id, bookingId, mentorEarning, 'session']
+          );
+          
+          await client.query('COMMIT');
+        
+          // Create notifications
+          await client.query(
+            'INSERT INTO notifications (user_id, type, title, message, related_id, related_type) VALUES ($1, $2, $3, $4, $5, $6)',
+            [mentee_id, 'payment_success', 'Payment Successful', 'Your payment has been confirmed. You can now join the session.', bookingId, 'booking']
+          );
+          
+          await client.query(
+            'INSERT INTO notifications (user_id, type, title, message, related_id, related_type) VALUES ($1, $2, $3, $4, $5, $6)',
+            [mentor_id, 'payment_received', 'Payment Received', `Payment of ₹${payment_amount} received for your session. You earned ₹${mentorEarning}.`, bookingId, 'booking']
+          );
+        
+          // Send real-time notifications
+          if (io) {
+            io.to(`user_${mentee_id}`).emit('payment_success', {
+              bookingId,
+              message: 'Payment successful! You can now join the session.'
+            });
+            
+            io.to(`user_${mentor_id}`).emit('payment_received', {
+              bookingId,
+              amount: payment_amount,
+              earning: mentorEarning,
+              message: `Payment received for your session.`
+            });
+          }
         }
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
     }
     
@@ -1195,6 +1217,40 @@ app.post('/api/payments/verify', async (req, res) => {
   } catch (error) {
     console.error('Payment verification error:', error);
     res.status(500).json({ error: 'Payment verification failed' });
+  }
+});
+
+// Razorpay webhook handler
+app.post('/api/payments/webhook', async (req, res) => {
+  try {
+    const webhookSignature = req.headers['x-razorpay-signature'];
+    const webhookBody = JSON.stringify(req.body);
+    
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+      .update(webhookBody)
+      .digest('hex');
+    
+    if (webhookSignature !== expectedSignature) {
+      return res.status(400).json({ error: 'Invalid webhook signature' });
+    }
+    
+    const event = req.body.event;
+    const paymentEntity = req.body.payload.payment.entity;
+    
+    if (event === 'payment.captured') {
+      // Find booking by payment ID and confirm payment
+      await pool.query(
+        'UPDATE video_calls SET payment_confirmed = true WHERE payment_id = $1',
+        [paymentEntity.id]
+      );
+      console.log('Payment confirmed via webhook:', paymentEntity.id);
+    }
+    
+    res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
@@ -1207,7 +1263,7 @@ app.post('/api/bookings', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Create booking in database
+    // Create booking in database with required channel_name
     const channelName = `booking_${Date.now()}_${menteeId}_${mentorId}`;
     const result = await pool.query(
       'INSERT INTO video_calls (mentee_id, mentor_id, channel_name, status, created_at, payment_confirmed, payment_amount) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
@@ -3680,6 +3736,40 @@ app.get('/api/mentor/:mentorId/booking-requests', async (req, res) => {
   } catch (error) {
     console.error('Get mentor booking requests error:', error);
     res.status(500).json({ error: 'Failed to get booking requests' });
+  }
+});
+
+// Payment status endpoint
+app.get('/api/bookings/:id/payment-status', async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    const result = await pool.query(
+      `SELECT status, payment_confirmed, payment_amount, payment_id, 
+              mentee_id, mentor_id, channel_name 
+       FROM video_calls WHERE id = $1`,
+      [bookingId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    
+    const booking = result.rows[0];
+    const callAllowed = booking.status === 'accepted' && booking.payment_confirmed;
+    const requiresPayment = booking.status === 'accepted' && !booking.payment_confirmed;
+    
+    res.json({
+      bookingId,
+      status: booking.status,
+      paymentStatus: booking.payment_confirmed ? 'paid' : 'pending',
+      callAllowed,
+      requiresPayment,
+      paymentAmount: booking.payment_amount,
+      paymentId: booking.payment_id
+    });
+  } catch (error) {
+    console.error('Get payment status error:', error);
+    res.status(500).json({ error: 'Failed to get payment status' });
   }
 });
 
