@@ -1180,7 +1180,8 @@ app.post('/api/create-razorpay-order', async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      keyId: process.env.RAZORPAY_KEY_ID?.substring(0, 12)
+      // key_id is public (not a secret) and required by Checkout in the client
+      keyId: process.env.RAZORPAY_KEY_ID
     });
   } catch (error) {
     console.error('Create Razorpay order error (unexpected):', error);
