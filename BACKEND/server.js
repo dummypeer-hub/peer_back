@@ -1121,15 +1121,33 @@ app.post('/api/create-razorpay-order', async (req, res) => {
     if (!amount || !bookingId) {
       return res.status(400).json({ error: 'Amount and bookingId are required' });
     }
+    // validate amount is a positive number
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      console.error('Invalid amount provided for Razorpay order:', amount);
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
     
     // Check if Razorpay is configured
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      console.error('Razorpay credentials not configured');
+      console.error('Razorpay credentials not configured (env missing)');
       return res.status(500).json({ error: 'Payment service not configured' });
+    }
+    // Ensure the razorpay client exists; try to initialize if it was not set earlier
+    if (!razorpay) {
+      try {
+        const keyId = process.env.RAZORPAY_KEY_ID;
+        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
+        console.log('Razorpay client lazily initialized in create-order handler');
+      } catch (initErr) {
+        console.error('Failed to initialize Razorpay client on-demand:', initErr);
+        return res.status(500).json({ error: 'Payment provider initialization failed' });
+      }
     }
     
     const options = {
-      amount: amount * 100, // Convert to paise
+      amount: numericAmount * 100, // Convert to paise
       currency: 'INR',
       receipt: `booking_${bookingId}_${Date.now()}`
     };
@@ -1146,19 +1164,27 @@ app.post('/api/create-razorpay-order', async (req, res) => {
       return res.status(500).json({ error: 'Razorpay credentials not configured' });
     }
     
-    console.log('Creating Razorpay order with options:', options);
-    const order = await razorpay.orders.create(options);
-    console.log('Razorpay order created:', order.id);
-    
+    console.log('Creating Razorpay order with options:', { amount: options.amount, currency: options.currency, receipt: options.receipt });
+    let order;
+    try {
+      order = await razorpay.orders.create(options);
+      console.log('Razorpay order created:', order && order.id);
+    } catch (rpError) {
+      // Razorpay SDK often includes a .error or .response; log useful parts
+      console.error('Razorpay.orders.create failed:', rpError && (rpError.error || rpError));
+      const message = (rpError && (rpError.error?.description || rpError.message)) || 'Razorpay order creation failed';
+      return res.status(502).json({ error: message });
+    }
+
     res.json({
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      keyId: process.env.RAZORPAY_KEY_ID
+      keyId: process.env.RAZORPAY_KEY_ID?.substring(0, 12)
     });
   } catch (error) {
-    console.error('Create Razorpay order error:', error);
-    res.status(500).json({ error: 'Failed to create payment order: ' + error.message });
+    console.error('Create Razorpay order error (unexpected):', error);
+    res.status(500).json({ error: 'Failed to create payment order: ' + (error && error.message ? error.message : 'unknown error') });
   }
 });
 
