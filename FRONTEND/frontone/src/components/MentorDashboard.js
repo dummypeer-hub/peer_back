@@ -659,13 +659,7 @@ const MentorDashboard = ({ user, onLogout }) => {
     }
   };
 
-  // Ensure mentor payments are refreshed when wallet tab is selected
-  useEffect(() => {
-    if (activeTab === 'wallet') {
-      loadMentorPayments();
-      loadUpiDetails();
-    }
-  }, [activeTab]);
+  // ...existing top-level hooks above this point
 
   return (
     <div className="mentor-dashboard">
@@ -717,7 +711,7 @@ const MentorDashboard = ({ user, onLogout }) => {
           </button>
           <button 
             className={`nav-btn ${activeTab === 'wallet' ? 'active' : ''}`}
-            onClick={() => setActiveTab('wallet')}
+            onClick={() => { setActiveTab('wallet'); loadMentorPayments(); loadUpiDetails(); }}
           >
             💰 Wallet
           </button>
