@@ -288,6 +288,9 @@ pool.connect(async (err, client, release) => {
         ALTER TABLE video_calls ADD COLUMN IF NOT EXISTS payment_id VARCHAR(255);
         ALTER TABLE video_calls ADD COLUMN IF NOT EXISTS payment_amount DECIMAL(10,2) DEFAULT 0;
         
+        -- Make channel_name nullable for bookings
+        ALTER TABLE video_calls ALTER COLUMN channel_name DROP NOT NULL;
+        
         CREATE TABLE IF NOT EXISTS webrtc_sessions (
           id SERIAL PRIMARY KEY,
           call_id INTEGER NOT NULL REFERENCES video_calls(id),
@@ -1205,9 +1208,10 @@ app.post('/api/bookings', async (req, res) => {
     }
     
     // Create booking in database
+    const channelName = `booking_${Date.now()}_${menteeId}_${mentorId}`;
     const result = await pool.query(
-      'INSERT INTO video_calls (mentee_id, mentor_id, status, created_at, payment_confirmed, payment_amount) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [menteeId, mentorId, 'pending', new Date().toISOString(), false, sessionFee]
+      'INSERT INTO video_calls (mentee_id, mentor_id, channel_name, status, created_at, payment_confirmed, payment_amount) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+      [menteeId, mentorId, channelName, 'pending', new Date().toISOString(), false, sessionFee]
     );
     
     const bookingId = result.rows[0].id;
