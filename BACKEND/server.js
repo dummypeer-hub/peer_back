@@ -1188,6 +1188,41 @@ app.post('/api/create-razorpay-order', async (req, res) => {
   }
 });
 
+// Temporary debug endpoint to test Razorpay credentials from production safely
+app.post('/api/debug/razorpay-order', async (req, res) => {
+  // This endpoint attempts to create a very small Razorpay order and returns
+  // non-sensitive provider response details. REMOVE this endpoint after debugging.
+  try {
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ ok: false, message: 'Razorpay env missing' });
+    }
+
+    // Lazy initialize if needed
+    if (!razorpay) {
+      try {
+        razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
+      } catch (e) {
+        console.error('Debug init failed:', e);
+        return res.status(500).json({ ok: false, message: 'Failed to init Razorpay client' });
+      }
+    }
+
+    const options = { amount: 100, currency: 'INR', receipt: `debug_${Date.now()}` };
+    try {
+      const order = await razorpay.orders.create(options);
+      return res.json({ ok: true, provider: 'razorpay', created: true, orderId: order.id });
+    } catch (rpErr) {
+      // Return sanitized provider error
+      const providerError = rpErr && (rpErr.error || rpErr);
+      console.error('Razorpay debug create failed:', providerError);
+      return res.status(502).json({ ok: false, provider: 'razorpay', error: providerError?.description || providerError?.message || String(providerError) });
+    }
+  } catch (err) {
+    console.error('Unexpected debug endpoint error:', err);
+    return res.status(500).json({ ok: false, message: 'Unexpected error' });
+  }
+});
+
 // Verify payment
 app.post('/api/payments/verify', async (req, res) => {
   try {
