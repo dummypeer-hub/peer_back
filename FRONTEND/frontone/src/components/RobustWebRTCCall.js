@@ -377,14 +377,28 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       }
     });
 
+    // Track processed offers to prevent duplicates
+    let processedOffers = new Set();
+    
     // Handle signaling events with detailed logging
     socket.on('offer', async (data) => {
       console.log(`📨 ${user.role} received offer from user ${data.from} for call ${data.callId}`);
       console.log('Offer details:', { callId: data.callId, from: data.from, myId: user.id, myRole: user.role });
       console.log('Offer SDP preview:', data.offer?.sdp?.substring(0, 100) + '...');
       
+      // Create unique offer ID to prevent duplicates
+      const offerKey = `${data.callId}-${data.from}-${data.timestamp || Date.now()}`;
+      
       if (data.callId == callId && data.from !== user.id && user.role === 'mentee') {
+        // Check if already processing or processed this offer
+        if (processedOffers.has(offerKey) || pc.signalingState === 'have-remote-offer') {
+          console.log('📨 ⚠️ Duplicate offer ignored - already processing');
+          return;
+        }
+        
+        processedOffers.add(offerKey);
         console.log('📨 ✅ Mentee processing offer...');
+        
         try {
           console.log('📨 PC state before processing:', {
             signalingState: pc.signalingState,
@@ -419,6 +433,7 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
           console.log('✅ 📤 ANSWER SENT SUCCESSFULLY TO MENTOR!');
         } catch (error) {
           console.error('❌ Error handling offer:', error);
+          processedOffers.delete(offerKey); // Allow retry on error
           console.error('Error details:', {
             name: error.name,
             message: error.message,
@@ -434,14 +449,10 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       }
     });
     
-    // Backup global offer handler
+    // Remove global offer handler to prevent duplicates
     socket.on('global_offer', async (data) => {
       console.log(`📡 ${user.role} received GLOBAL offer from user ${data.from} for call ${data.callId}`);
-      if (data.callId == callId && data.from !== user.id && user.role === 'mentee') {
-        console.log('📡 ✅ Processing global offer as backup...');
-        // Reuse the same processing logic
-        socket.emit('offer', data);
-      }
+      console.log('📡 ⚠️ Global offer ignored - using direct offer only');
     });
 
     socket.on('answer', async (data) => {
@@ -564,6 +575,24 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       
       socket.on('room_joined', createOfferHandler);
       
+      // Handle offer requests from mentee
+      socket.on('request_offer', (data) => {
+        if (data.callId == callId && data.from !== user.id) {
+          console.log('📤 Mentee requested offer, resending...');
+          if (pc.localDescription) {
+            socket.emit('offer', { 
+              callId, 
+              offer: pc.localDescription, 
+              from: user.id, 
+              role: user.role,
+              timestamp: Date.now()
+            });
+          } else {
+            createOfferHandler();
+          }
+        }
+      });
+      
       // Also try when participant joins (backup)
       socket.on('participant_joined', (data) => {
         if (data.participantCount >= 2) {
@@ -593,10 +622,11 @@ const RobustWebRTCCall = ({ callId, user, onEndCall }) => {
       
       // Add timeout for mentee if no offer received
       setTimeout(() => {
-        if (pc.signalingState === 'stable' && !remoteStream) {
-          console.log('⚠️ No offer received after 10 seconds, mentee may need to refresh');
+        if (pc.signalingState === 'stable' && !remoteStream && pc.connectionState !== 'connected') {
+          console.log('⚠️ No offer received after 15 seconds, requesting mentor to resend');
+          socket.emit('request_offer', { callId, from: user.id, role: user.role });
         }
-      }, 10000);
+      }, 15000);
     }
   };
 
