@@ -1113,10 +1113,19 @@ app.post('/api/create-razorpay-order', async (req, res) => {
       receipt: `booking_${bookingId}_${Date.now()}`
     };
     
-    console.log('Creating Razorpay order with options:', options);
-    console.log('Razorpay instance:', !!razorpay);
-    console.log('Razorpay credentials:', { keyId: !!process.env.RAZORPAY_KEY_ID, keySecret: !!process.env.RAZORPAY_KEY_SECRET });
+    // DEBUG: Check environment variables
+    console.log('Environment check:', {
+      hasKeyId: !!process.env.RAZORPAY_KEY_ID,
+      hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET,
+      keyIdFirst8: process.env.RAZORPAY_KEY_ID?.substring(0, 8),
+      secretLength: process.env.RAZORPAY_KEY_SECRET?.length
+    });
     
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ error: 'Razorpay credentials not configured' });
+    }
+    
+    console.log('Creating Razorpay order with options:', options);
     const order = await razorpay.orders.create(options);
     console.log('Razorpay order created:', order.id);
     
@@ -3771,6 +3780,17 @@ app.get('/api/bookings/:id/payment-status', async (req, res) => {
     console.error('Get payment status error:', error);
     res.status(500).json({ error: 'Failed to get payment status' });
   }
+});
+
+// Test environment variables endpoint
+app.get('/api/test-env', (req, res) => {
+  res.json({
+    hasRazorpayKeys: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+    keyIdLength: process.env.RAZORPAY_KEY_ID?.length,
+    keyStartsCorrect: process.env.RAZORPAY_KEY_ID?.startsWith('rzp_'),
+    secretLength: process.env.RAZORPAY_KEY_SECRET?.length,
+    keyIdFirst8: process.env.RAZORPAY_KEY_ID?.substring(0, 8)
+  });
 });
 
 // Export the Express app for Vercel

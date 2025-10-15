@@ -200,15 +200,19 @@ const SessionsPanel = ({ user, onJoinSession }) => {
     }
   };
 
+  const canJoinSession = (session) => {
+    return session.status === 'accepted' && session.payment_confirmed === true;
+  };
+
   const handleJoinSession = async (callId, channelName) => {
     console.log('SessionsPanel handleJoinSession called:', { callId, channelName, hasCallback: !!onJoinSession });
     
     try {
       // Check payment status before allowing join
-      const paymentResponse = await axios.get(`${config.API_BASE_URL}/video-call/${callId}/payment-status`);
-      const { canJoin, paymentConfirmed } = paymentResponse.data;
+      const paymentResponse = await axios.get(`${config.API_BASE_URL}/bookings/${callId}/status`);
+      const { callAllowed, paymentStatus } = paymentResponse.data;
       
-      if (!canJoin || !paymentConfirmed) {
+      if (!callAllowed || paymentStatus !== 'paid') {
         alert('Payment is required before joining the session. Please complete payment first.');
         return;
       }
@@ -373,7 +377,7 @@ const SessionsPanel = ({ user, onJoinSession }) => {
                   </>
                 )}
                 
-                {session.status === 'accepted' && !session.ended_at && (
+                {canJoinSession(session) && !session.ended_at && (
                   <button 
                     onClick={() => handleJoinSession(session.id, session.channel_name)}
                     className="join-btn primary"
