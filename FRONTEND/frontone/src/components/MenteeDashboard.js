@@ -94,6 +94,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       console.error('Failed to load payments history:', err);
       // Try alternative endpoint
       try {
+        const token = localStorage.getItem('token');
         const altResp = await axios.get(`${config.API_BASE_URL}/payments/${user.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -122,6 +123,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       console.error('Failed to load pay requests:', err);
       // Try alternative endpoint if main one fails
       try {
+        const token = localStorage.getItem('token');
         const altResp = await axios.get(`${config.API_BASE_URL}/sessions/mentee/${user.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
