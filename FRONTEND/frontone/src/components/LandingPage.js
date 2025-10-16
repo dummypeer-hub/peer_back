@@ -194,6 +194,16 @@ const LandingPage = ({ onLogin, onSignup }) => {
                     BTech from MIT ADT University. Specializes in creating intuitive user interfaces and seamless user experiences.
                   </p>
                 </div>
+                <div className="team-member">
+                  <div className="member-photo">
+                    <img src="/jeevan.jpg" alt="Jeevan" className="member-image" />
+                  </div>
+                  <h3>Jeevan</h3>
+                  <p className="member-title">Backend JS & Express.js Developer</p>
+                  <p className="member-bio">
+                    Specializes in backend development with JavaScript and Express.js, creating robust server-side solutions.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
