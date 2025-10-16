@@ -88,9 +88,20 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       const resp = await axios.get(`${config.API_BASE_URL}/payments/mentee/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Payments history response:', resp.data); // Debug log
       setPaymentsHistory(resp.data.payments || []);
     } catch (err) {
       console.error('Failed to load payments history:', err);
+      // Try alternative endpoint
+      try {
+        const altResp = await axios.get(`${config.API_BASE_URL}/payments/${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setPaymentsHistory(altResp.data.payments || altResp.data || []);
+      } catch (altErr) {
+        console.error('Alternative payments endpoint also failed:', altErr);
+        setPaymentsHistory([]);
+      }
     }
   };
 
@@ -101,12 +112,26 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       const resp = await axios.get(`${config.API_BASE_URL}/video-calls/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Pay requests response:', resp.data); // Debug log
       const acceptedSessions = resp.data.calls?.filter(call => 
         call.status === 'accepted' && !call.payment_confirmed
       ) || [];
+      console.log('Filtered accepted sessions:', acceptedSessions); // Debug log
       setPayRequests(acceptedSessions);
     } catch (err) {
       console.error('Failed to load pay requests:', err);
+      // Try alternative endpoint if main one fails
+      try {
+        const altResp = await axios.get(`${config.API_BASE_URL}/sessions/mentee/${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const pendingSessions = altResp.data.sessions?.filter(session => 
+          session.status === 'accepted' && !session.payment_confirmed
+        ) || [];
+        setPayRequests(pendingSessions);
+      } catch (altErr) {
+        console.error('Alternative endpoint also failed:', altErr);
+      }
     }
   };
 
@@ -338,6 +363,13 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     }
   }, [user]);
   
+  // Refresh stats when returning to home
+  useEffect(() => {
+    if (currentSection === 'home' && user?.id) {
+      loadMenteeStats();
+    }
+  }, [currentSection, user?.id]);
+  
   // Refresh popular blogs when returning to home section
   useEffect(() => {
     if (currentSection === 'home' && user?.id) {
@@ -410,10 +442,12 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
       // Calculate hours learned from completed sessions (10 minutes per session)
-      const hoursLearned = Math.round((response.data.completedSessions * 10) / 60 * 10) / 10;
+      const completedSessions = response.data.completedSessions || 0;
+      const hoursLearned = completedSessions > 0 ? (completedSessions * 10) / 60 : 0;
+      console.log('Stats loaded:', { completedSessions, hoursLearned }); // Debug log
       setStats({
         ...response.data,
-        hoursLearned
+        hoursLearned: Math.round(hoursLearned * 10) / 10 // Round to 1 decimal place
       });
     } catch (error) {
       console.error('Failed to load mentee stats:', error);
@@ -773,7 +807,13 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             </button>
             <button 
               className={`nav-link ${currentSection === 'payments' ? 'active' : ''}`} 
-              onClick={() => { setCurrentSection('payments'); loadPayments(); loadPayRequests(); }}
+              onClick={() => { 
+                setCurrentSection('payments'); 
+                setTimeout(() => {
+                  loadPayments(); 
+                  loadPayRequests();
+                }, 100);
+              }}
             >
               Payments
             </button>
@@ -1011,21 +1051,33 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
           <div className="payments-header">
             <h2>Payments</h2>
             <p>View your payment history and pending pay requests for confirmed sessions.</p>
+            <button 
+              onClick={() => { loadPayments(); loadPayRequests(); }}
+              className="refresh-btn"
+            >
+              🔄 Refresh
+            </button>
           </div>
 
           <div className="payments-grid">
             <div className="payments-history">
               <h3>Payment History</h3>
               {paymentsHistory.length === 0 ? (
-                <p>No payments found</p>
+                <div className="empty-state">
+                  <p>No payment history found</p>
+                  <small>Your completed payments will appear here</small>
+                </div>
               ) : (
                 <ul className="payments-list">
                   {paymentsHistory.map(p => (
                     <li key={p.id} className="payment-item">
-                      <div><strong>Amount:</strong> ₹{p.amount}</div>
-                      <div><strong>Status:</strong> {p.status}</div>
-                      <div><strong>Booking:</strong> {p.booking_id}</div>
-                      <div><strong>Date:</strong> {new Date(p.created_at).toLocaleString()}</div>
+                      <div className="payment-info">
+                        <div><strong>Amount:</strong> ₹{p.amount}</div>
+                        <div><strong>Status:</strong> <span className={`status ${p.status}`}>{p.status}</span></div>
+                        <div><strong>Booking ID:</strong> {p.booking_id || p.call_id}</div>
+                        <div><strong>Date:</strong> {new Date(p.created_at).toLocaleString()}</div>
+                        {p.mentor_name && <div><strong>Mentor:</strong> {p.mentor_name}</div>}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1035,26 +1087,62 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
             <div className="payments-requests">
               <h3>Pending Pay Requests</h3>
               {payRequests.length === 0 ? (
-                <p>No pending payments</p>
+                <div className="empty-state">
+                  <p>No pending payments</p>
+                  <small>Sessions requiring payment will appear here</small>
+                  <button 
+                    onClick={() => setCurrentSection('sessions')}
+                    className="view-sessions-btn"
+                  >
+                    View All Sessions
+                  </button>
+                </div>
               ) : (
                 payRequests.map(r => (
                   <div key={r.id} className="pay-request-card">
-                    <div><strong>Mentor:</strong> {r.mentor_name}</div>
-                    <div><strong>Amount:</strong> ₹100</div>
-                    <div><strong>Session:</strong> {r.status === 'accepted' ? 'Accepted - Payment Required' : r.status}</div>
-                    <div><strong>Created:</strong> {new Date(r.created_at).toLocaleString()}</div>
+                    <div className="request-info">
+                      <div><strong>Mentor:</strong> {r.mentor_name || 'Unknown Mentor'}</div>
+                      <div><strong>Amount:</strong> ₹100</div>
+                      <div><strong>Session Status:</strong> 
+                        <span className="status accepted">
+                          {r.status === 'accepted' ? 'Accepted - Payment Required' : r.status}
+                        </span>
+                      </div>
+                      <div><strong>Session ID:</strong> {r.id}</div>
+                      <div><strong>Created:</strong> {new Date(r.created_at).toLocaleString()}</div>
+                      {r.scheduled_time && (
+                        <div><strong>Scheduled:</strong> {new Date(r.scheduled_time).toLocaleString()}</div>
+                      )}
+                    </div>
                     <div className="pay-request-actions">
                       <button 
-                        onClick={() => handlePayForSession(r.id, r.mentor_name)}
+                        onClick={() => handlePayForSession(r.id, r.mentor_name || 'Mentor')}
                         className="pay-now-btn"
                       >
                         💳 Pay Now (₹100)
                       </button>
-                      <button onClick={() => setCurrentSection('sessions')}>View in Sessions</button>
+                      <button 
+                        onClick={() => setCurrentSection('sessions')}
+                        className="view-session-btn"
+                      >
+                        View in Sessions
+                      </button>
                     </div>
                   </div>
                 ))
               )}
+            </div>
+          </div>
+          
+          <div className="payments-info">
+            <div className="info-card">
+              <h4>💡 Payment Information</h4>
+              <ul>
+                <li>Session fee: ₹100 per session</li>
+                <li>Payment is required before joining accepted sessions</li>
+                <li>Refunds available if session is cancelled by mentor</li>
+                <li>Payment history shows all completed transactions</li>
+              </ul>
             </div>
           </div>
         </div>
