@@ -97,10 +97,14 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
   const loadPayRequests = async () => {
     try {
       const token = localStorage.getItem('token');
-      const resp = await axios.get(`${config.API_BASE_URL}/mentee/${user.id}/pay-requests`, {
+      // Load accepted sessions that need payment
+      const resp = await axios.get(`${config.API_BASE_URL}/video-calls/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setPayRequests(resp.data.requests || []);
+      const acceptedSessions = resp.data.calls?.filter(call => 
+        call.status === 'accepted' && !call.payment_confirmed
+      ) || [];
+      setPayRequests(acceptedSessions);
     } catch (err) {
       console.error('Failed to load pay requests:', err);
     }
@@ -405,8 +409,12 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
       const response = await axios.get(`${config.API_BASE_URL}/mentee/stats/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      // Update the stats in the home section
-      setStats(response.data);
+      // Calculate hours learned from completed sessions (10 minutes per session)
+      const hoursLearned = Math.round((response.data.completedSessions * 10) / 60 * 10) / 10;
+      setStats({
+        ...response.data,
+        hoursLearned
+      });
     } catch (error) {
       console.error('Failed to load mentee stats:', error);
     }
@@ -534,6 +542,31 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
     if (status === 'ready') {
       alert('Payment successful! You can now join the session from the Sessions tab.');
       setCurrentSection('sessions');
+    }
+  };
+
+  const handlePayForSession = async (sessionId, mentorName) => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Create payment for the session
+      const paymentResponse = await axios.post(`${config.API_BASE_URL}/create-payment`, {
+        callId: sessionId,
+        amount: 100,
+        menteeId: user.id
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (paymentResponse.data.success) {
+        // Redirect to payment gateway
+        window.location.href = paymentResponse.data.paymentUrl;
+      } else {
+        alert('Failed to initiate payment. Please try again.');
+      }
+    } catch (error) {
+      console.error('Payment initiation failed:', error);
+      alert('Failed to initiate payment. Please try again.');
     }
   };
 
@@ -782,7 +815,7 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 <div className="stat-label">Completed Sessions</div>
               </div>
               <div className="stat-item">
-                <div className="stat-number">{stats.hoursLearned}</div>
+                <div className="stat-number">{stats.hoursLearned || 0}</div>
                 <div className="stat-label">Hours Learned</div>
               </div>
             </div>
@@ -1005,12 +1038,19 @@ const MenteeDashboard = ({ user, onLogout, onJoinSession }) => {
                 <p>No pending payments</p>
               ) : (
                 payRequests.map(r => (
-                  <div key={r.booking_id} className="pay-request-card">
+                  <div key={r.id} className="pay-request-card">
                     <div><strong>Mentor:</strong> {r.mentor_name}</div>
-                    <div><strong>Amount:</strong> ₹{r.session_fee}</div>
-                    <div><strong>Scheduled:</strong> {r.scheduled_time ? new Date(r.scheduled_time).toLocaleString() : 'Not scheduled'}</div>
+                    <div><strong>Amount:</strong> ₹100</div>
+                    <div><strong>Session:</strong> {r.status === 'accepted' ? 'Accepted - Payment Required' : r.status}</div>
+                    <div><strong>Created:</strong> {new Date(r.created_at).toLocaleString()}</div>
                     <div className="pay-request-actions">
-                      <button onClick={() => setCurrentSection('sessions')}>View Request</button>
+                      <button 
+                        onClick={() => handlePayForSession(r.id, r.mentor_name)}
+                        className="pay-now-btn"
+                      >
+                        💳 Pay Now (₹100)
+                      </button>
+                      <button onClick={() => setCurrentSection('sessions')}>View in Sessions</button>
                     </div>
                   </div>
                 ))
