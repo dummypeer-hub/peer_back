@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../config';
-import './MentorProfile.css';
+import './MentorProfileEditor.css';
 
 const MentorProfileEditor = ({ user, onClose, onSave, embedded = false }) => {
   const [currentStep, setCurrentStep] = useState(0);
