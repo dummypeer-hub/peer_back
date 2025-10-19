@@ -23,7 +23,7 @@ h1, h2, h3, h4, h5, h6 {
 /* Header Styles */
 .dashboard-header {
   background: white !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
   padding: 20px 0 !important;
   display: flex !important;
   justify-content: space-between !important;
@@ -31,7 +31,7 @@ h1, h2, h3, h4, h5, h6 {
   position: sticky !important;
   top: 0 !important;
   z-index: 100 !important;
-  border-bottom: 1px solid #e2e8f0 !important;
+  border-bottom: 1px solid #f1f5f9 !important;
   height: 90px !important;
   min-height: 90px !important;
   max-height: 90px !important;
@@ -66,7 +66,7 @@ h1, h2, h3, h4, h5, h6 {
   background: none !important;
   border: none !important;
   outline: none !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: none !important;
   color: #000000 !important;
   font-size: 16px !important;
   font-weight: 700 !important;
@@ -197,7 +197,7 @@ h1, h2, h3, h4, h5, h6 {
 /* Stats Section */
 .stats-section {
   background: transparent;
-  padding: 24px;
+  padding: 32px 24px;
   box-shadow: none;
 }
 
@@ -214,10 +214,10 @@ h1, h2, h3, h4, h5, h6 {
 .stat-item {
   text-align: center;
   padding: 20px;
-  background: linear-gradient(135deg, #f8f9ff 0%, #e8ecff 100%);
+  background: white;
   border-radius: 12px;
-  border: 1px solid #1e40af;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   width: 160px;
   height: 160px;
   display: flex;
@@ -276,9 +276,9 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Search Section */
 .search-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: transparent;
   padding: 40px 30px;
-  color: white;
+  color: #1f2937;
 }
 
 .search-container {
@@ -295,7 +295,13 @@ h1, h2, h3, h4, h5, h6 {
   background: white;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.search-bar:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .search-bar input {
@@ -362,23 +368,25 @@ h1, h2, h3, h4, h5, h6 {
 
 .mentors-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 24px;
+  padding: 0 60px;
 }
 
 /* Mentor Card */
 .mentor-card {
-  background: #EEF4F4 !important;
+  background: white !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #e5e7eb !important;
   transition: all 0.3s ease;
   cursor: pointer;
   position: relative;
-  height: 400px;
+  height: auto;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -491,13 +499,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .skill-tag {
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-  color: #1e40af;
+  background: #f3f4f6;
+  color: #4b5563;
   padding: 4px 10px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
-  border: 1px solid #93c5fd;
+  border: none;
 }
 
 .interest-tag {
@@ -1233,6 +1241,7 @@ h1, h2, h3, h4, h5, h6 {
   margin: 10px 0;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -2176,6 +2185,7 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2 !important;
+  line-clamp: 2 !important;
   -webkit-box-orient: vertical;
   overflow: hidden;
   flex: 1;
